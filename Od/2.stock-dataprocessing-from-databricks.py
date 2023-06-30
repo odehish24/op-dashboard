@@ -1,24 +1,26 @@
 # Databricks notebook source
-#CONTINUE FROM 1.stock notebook
+# MAGIC %md
+# MAGIC CONTINUE FROM 1.stock notebook
 
 # COMMAND ----------
 
 # DBTITLE 1,Get daily kit created in 2023
-#retrieve all daily kit created from Jan 2023 - date (2023-06-27) 
+#retrieve all daily kit created from Jan 2023 - to date (2023-06-27) 
 kit_created = spark.sql("""
     SELECT 
         tt.id,
         tt.created_at,
         tt.test_kit_code,
         tt.lab,
+        tt.kit_type,
         eoc.brand AS brand1,
         dc.testing_service AS brand2,
         COUNT(*) AS count
     FROM raw_admin.test_kits tt
-        LEFT JOIN raw_admin.batches b ON b.id = tt.batch_id
-        LEFT JOIN raw_admin.distribution_centres dc ON dc.id = b.distribution_centre_id
         LEFT JOIN raw_admin.sti_test_orders sto ON tt.sti_test_order_id = sto.id
         LEFT JOIN raw_admin.episodes_of_care eoc ON sto.episode_of_care_id = eoc.id
+        LEFT JOIN raw_admin.batches b ON b.id = tt.batch_id
+        LEFT JOIN raw_admin.distribution_centres dc ON dc.id = b.distribution_centre_id
     WHERE tt.created_at > '2023-01-01 00:00:00.000'
     GROUP BY
         tt.id,
@@ -29,17 +31,13 @@ kit_created = spark.sql("""
         brand1,
         brand2
 """)
-
-
-# COMMAND ----------
-
 print(kit_created.count())
 
 # COMMAND ----------
 
-#get list of unique values in brand1 column
-unique_values = kit_created.select("brand1").distinct().rdd.map(lambda row: row[0]).collect()
-print(unique_values)
+# #get list of unique values in brand1 column
+# unique_values = kit_created.select("brand1").distinct().rdd.map(lambda row: row[0]).collect()
+# print(unique_values)
 
 
 # COMMAND ----------
@@ -70,14 +68,6 @@ kit_created1.show(n=5)
 
 # COMMAND ----------
 
-# save as parquet file
-# kit_created1.write.mode('overwrite').parquet('dbfs:/path/to/kit_created1.parquet')
-
-# Read the Parquet file into a DataFrame
-kit_created1 = spark.read.parquet('dbfs:/path/to/kit_created1.parquet')
-
-# COMMAND ----------
-
 #check for NULL values (empty cells)
 from pyspark.sql.functions import col, sum as spark_sum
 
@@ -86,24 +76,15 @@ null_counts.show()
 
 # COMMAND ----------
 
-#check for 'NULL' string values in each columns
-from pyspark.sql.functions import col, sum, lit, when
+# #check for 'NULL' string values in each columns
+# from pyspark.sql.functions import col, sum, lit, when
 
-column_counts = kit_created1.select(*[
-    sum(when(col(col_name) == 'NULL', lit(True)).otherwise(lit(False)).cast("integer")).alias(col_name)
-    for col_name in kit_created1.columns
-])
-column_counts.show()
+# column_counts = kit_created1.select(*[
+#     sum(when(col(col_name) == 'NULL', lit(True)).otherwise(lit(False)).cast("integer")).alias(col_name)
+#     for col_name in kit_created1.columns
+# ])
+# column_counts.show()
 
-
-# COMMAND ----------
-
-#check no of similar rows in brand1 and brand2 that is not null
-from pyspark.sql.functions import col
-
-similar_df = kit_created1.filter(col("brand1").isNotNull() & col("brand2").isNotNull()) \
-                           .filter(col("brand1") == col("brand2"))
-similar_df.count()
 
 # COMMAND ----------
 
@@ -122,17 +103,8 @@ kit_created2 = kit_created1.withColumn("brand2", when(col("brand2").isNull(), co
 
 # COMMAND ----------
 
-#check again for NULL values(empty cells)
-from pyspark.sql.functions import col, sum as spark_sum
-
-null_counts = kit_created2.select([spark_sum(col(c).isNull().cast('integer')).alias(c) for c in kit_created2.columns])
-null_counts.show()
-
-# COMMAND ----------
-
 #delete brand1 column, not needed anymore
 kit_created2 = kit_created2.drop("brand1")
-kit_created2.show(n=5)
 
 # COMMAND ----------
 
@@ -153,22 +125,19 @@ kit_created4 = kit_created3.withColumn("lab", when(kit_created3.lab == 3, 4).oth
 
 # COMMAND ----------
 
-# #save or update file 
-kit_created4.write.mode('overwrite').parquet('dbfs:/path/to/kit_created1.parquet')
-
-
-# COMMAND ----------
-
-#BREAK TIME -- CONTINUE BELOW --
-
-# COMMAND ----------
+# #save file 
+# kit_created4.write.mode('overwrite').parquet('dbfs:/path/to/kit_created1.parquet')
 
 # Retrieve kit_created from the Parquet file 
 kit_created = spark.read.parquet('dbfs:/path/to/kit_created1.parquet')
 
-# Create a temporary view f
+# Create a temporary view 
 kit_created.createOrReplaceTempView('kit_created')
-kit_created.count()
+
+# COMMAND ----------
+
+# MAGIC %sql
+# MAGIC select count(*) as Total_kit_created from kit_created
 
 # COMMAND ----------
 
@@ -200,12 +169,6 @@ consumable_used_df = (joined_df2
              .agg((sum(joined_df2['count'] * joined_df2['count1'])).alias('used'))
              )
 
-
-
-# COMMAND ----------
-
-consumable_used_df.count()
-
 # COMMAND ----------
 
 # Create a temporary view
@@ -229,6 +192,11 @@ consumable_df = spark.read.parquet('dbfs:/path/to/consumable.parquet')
 # Create a temporary view
 consumable_df.createOrReplaceTempView("consumable")
 
+
+# COMMAND ----------
+
+# MAGIC %sql
+# MAGIC select count(*) from consumable_used
 
 # COMMAND ----------
 
@@ -256,20 +224,125 @@ consumable_used_df3 = consumable_used_df2.withColumn(
 
 # COMMAND ----------
 
-#No of null colour kit_created that is not custom kit
-print(consumable_used_df3.filter(col("colour") == "NULL").count())
+#Number of null colour kit_created that is not custom kit
+# print(consumable_used_df3.filter(col("colour") == "NULL").count())
 
 # COMMAND ----------
 
-display(consumable_used_df3)
-
-# COMMAND ----------
-
-# # save file 
-# consumable_used_df3.write.mode('overwrite').parquet('dbfs:/path/to/consumable_used.parquet')
+# save file 
+consumable_used_df3.write.mode('overwrite').parquet('dbfs:/path/to/consumable_used.parquet')
 
 
 # COMMAND ----------
 
-#END HERE
-#CONTINUE ON 3.stock notebook
+# MAGIC %md
+# MAGIC END HERE \
+# MAGIC CONTINUE ON 3.stock notebook
+
+# COMMAND ----------
+
+#quantity in stock
+
+from pyspark import SparkFiles
+from pyspark.sql.functions import col, regexp_replace
+
+path = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQvualKidxOjIjDPQEiExsiFA18wIIno8y0qt_xTStd-FptmwHgtfN_PIbpM8nq5UtfnDaVc_ngSndF/pub?gid=1572502399&single=true&output=csv"
+spark.sparkContext.addFile(path)
+
+qty_df = spark.read.csv("file://"+SparkFiles.get("pub"), header=True, inferSchema= True)
+
+#select only the columnns needed
+qty_df = qty_df.select('Con_Id', 'Consumable', 'Con_Type', 'Total_Qty')
+
+# Replace commas in the "Total_Qty" column
+qty_df = qty_df.withColumn("Total_Qty", regexp_replace(col("Total_Qty"), ",", ""))
+
+# Convert "Total_Qty" column string to integer
+qty_df = qty_df.withColumn("Total_Qty", col("Total_Qty").cast("int"))
+
+# Save as a Parquet file
+qty_df.write.mode('overwrite').parquet("dbfs:/path/to/qty_df.parquet")
+
+# COMMAND ----------
+
+# Retrieve qty_df from the Parquet file
+# qty_df = spark.read.parquet("dbfs:/path/to/qty_df.parquet")
+
+# Retrieve the consumable_used from the Parquet file 
+consumable_used_df = spark.read.parquet('dbfs:/path/to/consumable_used.parquet')
+
+#drop kit_type column no longer needed
+consumable_used_df = consumable_used_df.drop("kit_type")
+
+
+# COMMAND ----------
+
+from pyspark.sql.functions import sum, col, when
+
+#Get stock used from 17june2023 to date
+june17 = consumable_used_df.filter(consumable_used_df.created_at > '2023-06-17 00:00:00')
+
+# display only consumables and the total used from 17june23 to date
+june17 = june17.groupBy("consumable").agg(sum("used").alias("used"))
+
+#rename consumable to avoid conflict
+june17 = june17.withColumnRenamed("consumable", "con")
+
+########### Join qty_df with june17 ################
+joined_df = qty_df.join(june17, qty_df.Consumable == june17.con, how='left')
+
+# Substract qty used from remaining total qty
+df = (joined_df
+             .groupBy('Consumable','Total_Qty')
+             .agg((sum(joined_df['Total_Qty'] - joined_df['used'])).alias('In_Stock'))
+             )
+
+#replace null in_stock with value from total_qty
+df = df.withColumn("In_Stock", when(col("In_Stock").isNull(), col("Total_Qty")).otherwise(col("In_Stock")))
+
+Qty_In_Stock_df = df.drop("Total_Qty")
+
+
+# COMMAND ----------
+
+display(Qty_In_Stock_df.orderBy("consumable", ascending=True))
+
+# COMMAND ----------
+
+# Create a temporary view
+consumable_used_df.createOrReplaceTempView("consumable_used")
+
+# COMMAND ----------
+
+from pyspark.sql.functions import date_trunc, sum
+
+# group by month
+monthly_used = consumable_used_df.groupBy(
+    date_trunc('Month', consumable_used_df.created_at).alias('Date'),
+    consumable_used_df.colour,
+    consumable_used_df.consumable,
+    consumable_used_df.brand,
+    consumable_used_df.lab
+).agg(
+    sum(consumable_used_df.used).alias('Used')
+)
+print(monthly_used.count())
+
+# COMMAND ----------
+
+display(monthly_used)
+
+# COMMAND ----------
+
+# MAGIC %sql
+# MAGIC
+# MAGIC SELECT consumable, SUM(used) as total_used
+# MAGIC FROM consumable_used
+# MAGIC WHERE to_date(created_at) = date_sub(current_date(), 1)
+# MAGIC GROUP BY consumable
+# MAGIC ORDER BY consumable 
+# MAGIC
+
+# COMMAND ----------
+
+

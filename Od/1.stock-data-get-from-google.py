@@ -342,10 +342,10 @@ schema = ["lab", "lab_id"]
 # Create DataFrame
 lab_df = spark.createDataFrame(data, schema)
 
-#create a file and Temp table to save lab table
+#save lab table
 lab_df.write.mode('overwrite').parquet('dbfs:/path/to/lab.parquet')
 
-# Read the Parquet file into a DataFrame
+# Retrieve lab 
 lab_df = spark.read.parquet('dbfs:/path/to/lab.parquet')
 
 
@@ -362,10 +362,10 @@ schema = ["brand", "brand_id"]
 # Create DataFrame
 brand_df = spark.createDataFrame(data, schema)
 
-#create a file and Temp table to save combined_df table
+#save brand table
 brand_df.write.mode('overwrite').parquet('dbfs:/path/to/brand.parquet')
 
-# Read the Parquet file into a DataFrame
+# Retrieve
 brand_df = spark.read.parquet('dbfs:/path/to/brand.parquet')
 
 
@@ -380,13 +380,14 @@ spark.sparkContext.addFile(path)
 
 consumable_df = spark.read.csv("file://"+SparkFiles.get("pub"), header=True, inferSchema= True)
 
-#create a file and Temp table to save combined_df table
+#save table
 consumable_df.write.mode('overwrite').parquet('dbfs:/path/to/consumable.parquet')
 
-# Read the Parquet file into a DataFrame
+# Retrieve
 consumable_df = spark.read.parquet('dbfs:/path/to/consumable.parquet')
 
 # COMMAND ----------
 
-#END HERE
-#CONTINUE FROM 2.stock notebook
+# MAGIC %md
+# MAGIC END HERE
+# MAGIC CONTINUE FROM 2.stock notebook

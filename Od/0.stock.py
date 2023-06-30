@@ -1,24 +1,23 @@
 # Databricks notebook source
 # DBTITLE 1,Query to get all test_kit_code and their required_klasses
 #Query to get all testkit_codes 8191
-query_result = spark.sql("""
-SELECT tkm.test_kit_code, tkm.color, tkm.required_klasses, 
-    COUNT(*) AS total_test
-    FROM raw_admin.test_kits tt
-    RIGHT JOIN raw_admin.testkit_metadata tkm 
-    ON tkm.test_kit_code = tt.test_kit_code
-    GROUP BY tkm.test_kit_code, tkm.color, tkm.required_klasses   
-    ORDER BY total_test DESC
+df = spark.sql("""
+    SELECT test_kit_code, required_klasses
+    FROM raw_admin.testkit_metadata 
     """)
 display(df)
 
 # COMMAND ----------
 
 #remove the {} curly braces from the required_klasses
-df['required_klasses'] = df['required_klasses'].str.replace('[{}]','', regex=True)
-display(df)
+from pyspark.sql.functions import regexp_replace
+
+df = df.withColumn('required_klasses', regexp_replace('required_klasses', '[{}]', ''))
 
 # COMMAND ----------
+
+from pyspark.sql.functions import udf
+from pyspark.sql.types import StringType
 
 # create a function that extract test-sample-type from required_klasses
 def extract_test_sample(row):
@@ -38,27 +37,13 @@ def extract_test_sample(row):
     # Return unique keywords as a comma-separated string
     return ','.join(found_keywords)
 
-# Create the new column (test_sample) by applying the function extract_test_sample 
-df['test_sample'] = df['required_klasses'].apply(extract_test_sample)
+# Define the UDF
+extract_test_sample_udf = udf(extract_test_sample, StringType())
+
+# Create the new column (test_sample) by applying the UDF
+df = df.withColumn('test_sample', extract_test_sample_udf(df['required_klasses']))
 
 
 # COMMAND ----------
 
-# #Create a temp table (test_codes_colours) with spark_df 
-# from pyspark.sql import SparkSession
-
-# # Start a Spark Session
-# spark = SparkSession.builder.getOrCreate()
-
-# # Convert the pandas DataFrame to a PySpark DataFrame
-# spark_df = spark.createDataFrame(df)
-
-# # Create a temporary view
-# spark_df.createOrReplaceTempView("test_codes_colours")
-
-# COMMAND ----------
-
-# # Drop temp view when not needed
-# from pyspark.sql import SparkSession
-# spark = SparkSession.builder.getOrCreate()
-# spark.catalog.dropTempView("table_df")
+display(df)

@@ -28,8 +28,8 @@ fettle_df = df3.select("test_kit_code", "brand", "lab", "new_col.consumable", "n
 
 # COMMAND ----------
 
-# # Save as a Parquet file
-# fettle_df.write.parquet("dbfs:/path/to/fettle_df.parquet")
+# Save as a Parquet file
+fettle_df.write.parquet("dbfs:/path/to/fettle_df.parquet")
 
 # Retrieve fettle_df from the Parquet file
 fettle_df = spark.read.parquet("dbfs:/path/to/fettle_df.parquet")
@@ -67,8 +67,8 @@ sh_sps_df = df3.select("test_kit_code", "brand", "lab", "new_col.consumable", "n
 
 # COMMAND ----------
 
-# # Save as a Parquet file
-# sh_sps_df.write.parquet("dbfs:/path/to/sh_sps_df.parquet")
+# Save as a Parquet file
+sh_sps_df.write.parquet("dbfs:/path/to/sh_sps_df.parquet")
 
 # Retrieve sh_sps_df from the Parquet file
 sh_sps_df = spark.read.parquet("dbfs:/path/to/sh_sps_df.parquet")
@@ -106,8 +106,8 @@ sh_tdl_df = df3.select("test_kit_code", "brand", "lab", "new_col.consumable", "n
 
 # COMMAND ----------
 
-# # Save as a Parquet file
-# sh_tdl_df.write.parquet("dbfs:/path/to/sh_tdl_df.parquet")
+# Save as a Parquet file
+sh_tdl_df.write.parquet("dbfs:/path/to/sh_tdl_df.parquet")
 
 # Retrieve sh_tdl_df from the Parquet file
 sh_tdl_df = spark.read.parquet("dbfs:/path/to/sh_tdl_df.parquet")
@@ -146,8 +146,8 @@ ireland_df = df3.select("test_kit_code", "brand", "lab", "new_col.consumable", "
 
 # COMMAND ----------
 
-# # Save as a Parquet file
-# ireland_df.write.parquet("dbfs:/path/to/ireland_df.parquet")
+# Save as a Parquet file
+ireland_df.write.parquet("dbfs:/path/to/ireland_df.parquet")
 
 # Read the Parquet file
 ireland_df = spark.read.parquet("dbfs:/path/to/ireland_df.parquet")
@@ -185,8 +185,8 @@ freetest_df = df3.select("test_kit_code", "brand", "lab", "new_col.consumable", 
 
 # COMMAND ----------
 
-# # Save as a Parquet file
-# freetest_df.write.parquet("dbfs:/path/to/freetest_df.parquet")
+# Save as a Parquet file
+freetest_df.write.parquet("dbfs:/path/to/freetest_df.parquet")
 
 # Read the Parquet file
 freetest_df = spark.read.parquet("dbfs:/path/to/freetest_df.parquet")
@@ -264,8 +264,8 @@ aras_romania_df = df3.select("test_kit_code", "brand", "lab", "new_col.consumabl
 
 # COMMAND ----------
 
-# # Save as a Parquet file
-# aras_romania_df.write.mode('overwrite').parquet("dbfs:/path/to/aras_romania_df.parquet")
+# Save as a Parquet file
+aras_romania_df.write.mode('overwrite').parquet("dbfs:/path/to/aras_romania_df.parquet")
 
 # Read the Parquet
 aras_romania_df = spark.read.parquet("dbfs:/path/to/aras_romania_df.parquet")
@@ -284,8 +284,8 @@ display(combined_df)
 
 # COMMAND ----------
 
-# # Save the DataFrame as a Parquet file
-# combined_df.write.mode('overwrite').parquet("dbfs:/path/to/new_combined_df.parquet")
+# Save the DataFrame as a Parquet file
+combined_df.write.mode('overwrite').parquet("dbfs:/path/to/new_combined_df.parquet")
 
 # Read the Parquet file into a DataFrame
 combined_df = spark.read.parquet("dbfs:/path/to/new_combined_df.parquet")
@@ -296,7 +296,7 @@ print(combined_df.count())
 
 # COMMAND ----------
 
-#DATA PREPROCESSING BEGINS
+#DATA PREPROCESSING BELOW
 
 # COMMAND ----------
 
@@ -319,8 +319,8 @@ bill_of_materials_df = no_zero_count_df.select([F.col(c).alias(c+'1') for c in n
 
 # COMMAND ----------
 
-# # Save bill_of_materials as a Parquet file
-# bill_of_materials_df.write.mode("overwrite").parquet("dbfs:/path/to/bill_of_materials_df.parquet")
+# Save bill_of_materials as a Parquet file
+bill_of_materials_df.write.mode("overwrite").parquet("dbfs:/path/to/bill_of_materials_df.parquet")
 
 # Read the Parquet file
 bill_of_materials_df = spark.read.parquet("dbfs:/path/to/bill_of_materials_df.parquet")
@@ -383,8 +383,21 @@ consumable_df = spark.read.csv("file://"+SparkFiles.get("pub"), header=True, inf
 #save table
 consumable_df.write.mode('overwrite').parquet('dbfs:/path/to/consumable.parquet')
 
-# Retrieve
-consumable_df = spark.read.parquet('dbfs:/path/to/consumable.parquet')
+
+# COMMAND ----------
+
+# DBTITLE 1,Create Tables from parquet file
+#create table for bill_of_materials
+spark.sql("CREATE TABLE IF NOT EXISTS bill_of_materials USING parquet OPTIONS (path 'dbfs:/path/to/bill_of_materials_df.parquet')")
+
+#create table for consumables
+spark.sql("CREATE TABLE IF NOT EXISTS consumables USING parquet OPTIONS (path 'dbfs:/path/to/consumable.parquet')")
+
+#create table for lab
+spark.sql("CREATE TABLE IF NOT EXISTS lab USING parquet OPTIONS (path 'dbfs:/path/to/lab.parquet')")
+
+#create table for brand
+spark.sql("CREATE TABLE IF NOT EXISTS brand USING parquet OPTIONS (path 'dbfs:/path/to/brand.parquet')")
 
 # COMMAND ----------
 

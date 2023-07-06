@@ -9,7 +9,7 @@
 kit_created = spark.sql("""
     SELECT 
         tt.id,
-        tt.packaged_at,
+        tt.created_at,
         tt.test_kit_code,
         tt.lab,
         tt.kit_type,
@@ -24,7 +24,7 @@ kit_created = spark.sql("""
     WHERE tt.created_at > '2023-01-01 00:00:00.000'
     GROUP BY
         tt.id,
-        tt.packaged_at,
+        tt.created_at,
         tt.test_kit_code,
         tt.lab,
         tt.kit_type,
@@ -158,7 +158,7 @@ joined_df2 = joined_df.drop('test_kit_code1', 'brand1', 'lab1')
 
 # Calculate the number of consumables used by multiplying 'count' and 'count1' columns 
 consumable_used_df = (joined_df2
-             .groupBy('packaged_at', 'test_kit_code', 'brand2', 'lab', 'kit_type','consumable1')
+             .groupBy('created_at', 'test_kit_code', 'brand2', 'lab', 'kit_type','consumable1')
              .agg((sum(joined_df2['count'] * joined_df2['count1'])).alias('used'))
              )
 consumable_used_df.createOrReplaceTempView("consumable_used")
@@ -167,7 +167,7 @@ consumable_used_df.createOrReplaceTempView("consumable_used")
 
 #replace the ids of brand, lab, consumable with the full names 
 consumable_used_df2 = spark.sql("""
-   SELECT cu.packaged_at, tr.internal_name AS colour, c.consumable, b.brand, l.lab, cu.kit_type, cu.used
+   SELECT cu.created_at, tr.internal_name AS colour, c.consumable, b.brand, l.lab, cu.kit_type, cu.used
    FROM consumable_used cu
    LEFT JOIN consumables c ON c.con_id = cu.consumable1
    LEFT JOIN brand b ON b.brand_id = cu.brand2
@@ -241,7 +241,7 @@ qty_df.write.mode('overwrite').parquet("dbfs:/path/to/qty_df.parquet")
 from pyspark.sql.functions import sum, col, when
 
 #Get stock used from 17june2023 to date
-june17 = consumable_used_df3.filter(consumable_used_df3.packaged_at > '2023-06-17 00:00:00')
+june17 = consumable_used_df3.filter(consumable_used_df3.created_at > '2023-06-17 00:00:00')
 
 # display only consumables and the total used from 17june23 to date
 june17 = june17.groupBy("consumable").agg(sum("used").alias("used"))
@@ -295,7 +295,7 @@ from pyspark.sql.functions import date_trunc, sum
 
 # group by month
 monthly_used = consumable_used_df3.groupBy(
-    date_trunc('Month', consumable_used_df3.packaged_at).alias('Date'),
+    date_trunc('Month', consumable_used_df3.created_at).alias('Date'),
     consumable_used_df3.colour,
     consumable_used_df3.consumable,
     consumable_used_df3.brand,
@@ -315,11 +315,11 @@ display(monthly_used)
 from pyspark.sql.functions import col, sum, to_date, max
 
 # Get the latest date from the df
-max_date = consumable_used_df3.select(max(to_date(col("packaged_at")))).first()[0]
+max_date = consumable_used_df3.select(max(to_date(col("created_at")))).first()[0]
 
 # Filter the rows for the most recent day and perform aggregation
 last_used_df = consumable_used_df3 \
-    .filter(to_date(col("packaged_at")) == max_date) \
+    .filter(to_date(col("created_at")) == max_date) \
     .groupBy("consumable") \
     .agg(sum("used").alias("total_used")) \
     .orderBy("consumable")
@@ -334,23 +334,8 @@ from pyspark.sql.functions import col, sum, to_date, max
 # Get the colour latest date from the df
 
 colour_used_df = consumable_used_df3 \
-    .filter(to_date(col("packaged_at")) == max_date) \
+    .filter(to_date(col("created_at")) == max_date) \
     .groupBy("colour", "consumable") \
     .agg(sum("used").alias("total_used"))
-    .orderBy("total_used") 
-
-display(colour_used_df)
-
-# COMMAND ----------
-
-from pyspark.sql.functions import col, sum, to_date, max
-
-# Get the colour latest date from the df
-
-colour_used_df = consumable_used_df3 \
-    .filter(to_date(col("packaged_at")) == max_date) \
-    .groupBy("colour", "consumable") \
-    .agg(sum("used").alias("total_used")) \
-    .orderBy("total_used") 
 
 display(colour_used_df)

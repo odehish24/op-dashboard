@@ -202,7 +202,7 @@ consumable_used_df3.write.format("parquet").mode("overwrite").saveAsTable("consu
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC BREAK \
+# MAGIC  \
 # MAGIC CONTINUE 
 
 # COMMAND ----------
@@ -287,7 +287,7 @@ display(Qty_In_Stock_df.orderBy("consumable", ascending=True))
 # COMMAND ----------
 
 # MAGIC %sql
-# MAGIC select count(*) from consumable_used
+# MAGIC select sum(used) from consumable_used
 
 # COMMAND ----------
 

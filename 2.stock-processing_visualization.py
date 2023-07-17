@@ -1,6 +1,8 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC CONTINUE FROM 1.stock notebook
+# MAGIC START FROM 1.stock notebook
+# MAGIC
+# MAGIC ###3. CREATE DAILY KIT CREATED TABLE
 
 # COMMAND ----------
 
@@ -108,6 +110,7 @@ kit_created3 = kit_created2.filter(col("brand2").isNotNull())
 
 # COMMAND ----------
 
+# DBTITLE 1,Reassign Lab Medlab (3) to Enfer (4)
 #Reassign medlab 3 to Enfer 4 (medlab no longer in use)
 from pyspark.sql.functions import when
 
@@ -122,8 +125,7 @@ kit_created_df.createOrReplaceTempView("kit_created")
 
 # COMMAND ----------
 
-# kit_created_df = spark.read.table("kit_created")
-
+# DBTITLE 1,Retrieve bill_of_materials, lab, brand and consumables df
 # Retrieve bill_of_materials 
 bill_of_materials_df = spark.read.parquet("dbfs:/path/to/bill_of_materials_df.parquet")
 
@@ -139,7 +141,7 @@ consumable_df = spark.read.parquet('dbfs:/path/to/consumable.parquet')
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ##Calculate consumables used per kit created
+# MAGIC ###4. Calculate consumables used per kit created
 
 # COMMAND ----------
 
@@ -165,14 +167,15 @@ consumable_used_df.createOrReplaceTempView("consumable_used")
 
 # COMMAND ----------
 
+# DBTITLE 1,Get the names of brand, lab, colour, consumable to replace the ids
 #replace the ids of brand, lab, consumable with the full names 
 consumable_used_df2 = spark.sql("""
-   SELECT cu.created_at, tr.internal_name AS colour, c.consumable, b.brand, l.lab, cu.kit_type, cu.used
+   SELECT cu.created_at, tcc.colour, c.consumable, b.brand, l.lab, cu.kit_type, cu.used
    FROM consumable_used cu
    LEFT JOIN consumables c ON c.con_id = cu.consumable1
    LEFT JOIN brand b ON b.brand_id = cu.brand2
    LEFT JOIN lab l ON l.lab_id = cu.lab
-   LEFT JOIN raw_admin.test_regimes tr on tr.test_kit_code = cu.test_kit_code
+   LEFT JOIN testkit_code_colour tcc on tcc.test_kit_code = cu.test_kit_code
    
 """)
 consumable_used_df2.count()
@@ -202,12 +205,11 @@ consumable_used_df3.write.format("parquet").mode("overwrite").saveAsTable("consu
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC  \
-# MAGIC CONTINUE 
+# MAGIC ###5. Calculate Stock level based on Stock Usage
 
 # COMMAND ----------
 
-# DBTITLE 1,Get Quantity in Stock from supplies - from google sheet
+# DBTITLE 1,Get Quantity in Stock - from supplies tracker google sheet
 #Get quantity in stock
 
 from pyspark import SparkFiles
@@ -272,7 +274,7 @@ Qty_In_Stock_df.write.format("parquet").mode("overwrite").saveAsTable("qty_in_st
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC #df visuals
+# MAGIC ###notebook visuals
 
 # COMMAND ----------
 

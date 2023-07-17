@@ -1,4 +1,9 @@
 # Databricks notebook source
+# MAGIC %md
+# MAGIC ###1. CREATE BILL OF MATERIALS TABLE 
+
+# COMMAND ----------
+
 # DBTITLE 1,FETTLE-TDL-fetch from google sheet
 from pyspark import SparkFiles
 
@@ -21,7 +26,7 @@ fettle_tdl_list = [col for col in df1.columns if col not in ["test_kit_code", "b
 # Combine all columns into a single array column
 df2 = df1.withColumn("array_col", F.array([F.struct(F.lit(c).alias("consumable"), F.col(c).alias("count")) for c in fettle_tdl_list]))
 
-# Explode the array into multiple rows
+# Transpose the columns into multiple rows
 df3 = df2.select("test_kit_code", "brand", "lab", F.explode("array_col").alias("new_col"))
 
 fettle_df = df3.select("test_kit_code", "brand", "lab", "new_col.consumable", "new_col.count")
@@ -60,7 +65,7 @@ sh_sps_df_list = [col for col in sh_sps_df.columns if col not in ["test_kit_code
 # Combine all columns into a single array column
 df2 = sh_sps_df.withColumn("array_col", F.array([F.struct(F.lit(c).alias("consumable"), F.col(c).alias("count")) for c in sh_sps_df_list]))
 
-# Explode the array into multiple rows
+# Transpose the array into multiple rows
 df3 = df2.select("test_kit_code", "brand", "lab", F.explode("array_col").alias("new_col"))
 
 sh_sps_df = df3.select("test_kit_code", "brand", "lab", "new_col.consumable", "new_col.count")
@@ -99,7 +104,7 @@ sh_tdl_df_list = [col for col in sh_tdl_df.columns if col not in ["test_kit_code
 # Combine all columns into a single array column
 df2 = sh_tdl_df.withColumn("array_col", F.array([F.struct(F.lit(c).alias("consumable"), F.col(c).alias("count")) for c in sh_tdl_df_list]))
 
-# Explode the array into multiple rows
+# Transpose the array into multiple rows
 df3 = df2.select("test_kit_code", "brand", "lab", F.explode("array_col").alias("new_col"))
 
 sh_tdl_df = df3.select("test_kit_code", "brand", "lab", "new_col.consumable", "new_col.count")
@@ -139,7 +144,7 @@ ireland_df_list = [col for col in ireland_df.columns if col not in ["test_kit_co
 # Combine all columns into a single array column
 df2 = ireland_df.withColumn("array_col", F.array([F.struct(F.lit(c).alias("consumable"), F.col(c).alias("count")) for c in ireland_df_list]))
 
-# Explode the array into multiple rows
+# Transpose the columns into multiple rows
 df3 = df2.select("test_kit_code", "brand", "lab", F.explode("array_col").alias("new_col"))
 
 ireland_df = df3.select("test_kit_code", "brand", "lab", "new_col.consumable", "new_col.count")
@@ -217,7 +222,7 @@ hepc_ireland_list = [col for col in hepc_ireland_df.columns if col not in ["test
 # Combine all columns into a single array column
 df2 = hepc_ireland_df.withColumn("array_col", F.array([F.struct(F.lit(c).alias("consumable"), F.col(c).alias("count")) for c in hepc_ireland_list]))
 
-# Explode the array into multiple rows
+# Transpose the columns into multiple rows
 df3 = df2.select("test_kit_code", "brand", "lab", F.explode("array_col").alias("new_col"))
 
 hepc_ireland_df = df3.select("test_kit_code", "brand", "lab", "new_col.consumable", "new_col.count")
@@ -256,7 +261,7 @@ aras_romania_list = [col for col in aras_romania_df.columns if col not in ["test
 # Combine all columns into a single array column
 df2 = aras_romania_df.withColumn("array_col", F.array([F.struct(F.lit(c).alias("consumable"), F.col(c).alias("count")) for c in aras_romania_list]))
 
-# Explode the array into multiple rows
+# Transpose the columns into multiple rows
 df3 = df2.select("test_kit_code", "brand", "lab", F.explode("array_col").alias("new_col"))
 
 # Select the values from the new construct column
@@ -273,13 +278,52 @@ aras_romania_df = spark.read.parquet("dbfs:/path/to/aras_romania_df.parquet")
 
 # COMMAND ----------
 
-# DBTITLE 1,Combine all seven dfs to one
-# combine all 7 tables
+# DBTITLE 1,IRELAND - MEDLAB
+#ireland_medlab
+from pyspark import SparkFiles
+
+path = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRORkKyB9jbaQ7TfpldxQI5zR_tFr4IXmHVPOfy56dORTyzxkumgZqV9k8kd_JwAD0kjAHm3XhfSxLM/pub?gid=187790868&single=true&output=csv"
+spark.sparkContext.addFile(path)
+
+medlab_df = spark.read.csv("file://"+SparkFiles.get("pub"), header=True, inferSchema= True)
+
+#drop the columnns not needed
+medlab_df = medlab_df.drop('test_sample','No of Instruction')
+
+# COMMAND ----------
+
+#medlab transpose columns
+import pyspark.sql.functions as F
+
+# Create a list of new column names, excluding "test_kit_code", "brand" and "lab"
+medlab_df_list = [col for col in medlab_df.columns if col not in ["test_kit_code", "brand", "lab"]]
+
+# Combine all columns into a single array column
+df2 = medlab_df.withColumn("array_col", F.array([F.struct(F.lit(c).alias("consumable"), F.col(c).alias("count")) for c in medlab_df_list]))
+
+# Transpose the columns into multiple rows
+df3 = df2.select("test_kit_code", "brand", "lab", F.explode("array_col").alias("new_col"))
+
+medlab_df = df3.select("test_kit_code", "brand", "lab", "new_col.consumable", "new_col.count")
+
+# COMMAND ----------
+
+# Save as a Parquet file
+medlab_df.write.parquet("dbfs:/path/to/medlab_df.parquet")
+
+# Read the Parquet file
+medlab_df = spark.read.parquet("dbfs:/path/to/medlab_df.parquet")
+display(medlab_df)
+
+# COMMAND ----------
+
+# DBTITLE 1,Combine all eight dfs to one
+# combine all 8 tables
 from pyspark.sql import SparkSession
 
 spark = SparkSession.builder.getOrCreate()
 
-combined_df = fettle_df.unionByName(sh_sps_df).unionByName(sh_tdl_df).unionByName(ireland_df).unionByName(freetest_df).unionByName(hepc_ireland_df).unionByName(aras_romania_df)
+combined_df = fettle_df.unionByName(sh_sps_df).unionByName(sh_tdl_df).unionByName(ireland_df).unionByName(freetest_df).unionByName(hepc_ireland_df).unionByName(aras_romania_df).unionByName(medlab_df)
 display(combined_df)
 
 # COMMAND ----------
@@ -322,8 +366,27 @@ bill_of_materials_df = no_zero_count_df.select([F.col(c).alias(c+'1') for c in n
 # Save bill_of_materials as a Parquet file
 bill_of_materials_df.write.mode("overwrite").parquet("dbfs:/path/to/bill_of_materials_df.parquet")
 
-# Read the Parquet file
-bill_of_materials_df = spark.read.parquet("dbfs:/path/to/bill_of_materials_df.parquet")
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ###2. CREATE TESTKIT_CODE_COLOUR, LAB, BRAND, CONSUMABLE TABLE
+
+# COMMAND ----------
+
+# DBTITLE 1,Create testkit_code_colour table
+# create a testKit_code_colour table from google sheet
+from pyspark import SparkFiles
+
+path = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRORkKyB9jbaQ7TfpldxQI5zR_tFr4IXmHVPOfy56dORTyzxkumgZqV9k8kd_JwAD0kjAHm3XhfSxLM/pub?gid=1997112257&single=true&output=csv"
+spark.sparkContext.addFile(path)
+
+testkit_code_colour_df = spark.read.csv("file://"+SparkFiles.get("pub"), header=True, inferSchema= True)
+
+#select only the columnns needed
+testkit_code_colour_df = testkit_code_colour_df.select('test_kit_code', 'colour')
+
+#save table
+testkit_code_colour_df.write.mode('overwrite').parquet('dbfs:/path/to/code_colour.parquet')
 
 # COMMAND ----------
 
@@ -393,6 +456,9 @@ spark.sql("CREATE TABLE IF NOT EXISTS bill_of_materials USING parquet OPTIONS (p
 #create table for consumables
 spark.sql("CREATE TABLE IF NOT EXISTS consumables USING parquet OPTIONS (path 'dbfs:/path/to/consumable.parquet')")
 
+#create table for testkit_code_colour
+spark.sql("CREATE TABLE IF NOT EXISTS testkit_code_colour USING parquet OPTIONS (path 'dbfs:/path/to/code_colour.parquet')")
+
 #create table for lab
 spark.sql("CREATE TABLE IF NOT EXISTS lab USING parquet OPTIONS (path 'dbfs:/path/to/lab.parquet')")
 
@@ -402,5 +468,4 @@ spark.sql("CREATE TABLE IF NOT EXISTS brand USING parquet OPTIONS (path 'dbfs:/p
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC END HERE
 # MAGIC CONTINUE FROM 2.stock notebook

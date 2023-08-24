@@ -4,9 +4,12 @@
 
 # COMMAND ----------
 
-# DBTITLE 1,FETTLE-TDL-fetch from google sheet
 from pyspark import SparkFiles
+import pyspark.sql.functions as F
 
+# COMMAND ----------
+
+# DBTITLE 1,FETTLE-TDL-fetch from google sheet
 path = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRORkKyB9jbaQ7TfpldxQI5zR_tFr4IXmHVPOfy56dORTyzxkumgZqV9k8kd_JwAD0kjAHm3XhfSxLM/pub?gid=1309072669&single=true&output=csv"
 spark.sparkContext.addFile(path)
 
@@ -31,13 +34,13 @@ df3 = df2.select("test_kit_code", "brand", "lab", F.explode("array_col").alias("
 
 fettle_df = df3.select("test_kit_code", "brand", "lab", "new_col.consumable", "new_col.count")
 
+#remove zero count rows
+fettle_df = fettle_df.filter(fettle_df['count']!=0)
+
 # COMMAND ----------
 
 # Save as a Parquet file
-fettle_df.write.parquet("dbfs:/path/to/fettle_df.parquet")
-
-# Retrieve fettle_df from the Parquet file
-fettle_df = spark.read.parquet("dbfs:/path/to/fettle_df.parquet")
+fettle_df.write.mode('overwrite').parquet("dbfs:/path/to/fettle_df.parquet")
 display(fettle_df)
 
 # COMMAND ----------
@@ -67,16 +70,14 @@ df2 = sh_sps_df.withColumn("array_col", F.array([F.struct(F.lit(c).alias("consum
 
 # Transpose the array into multiple rows
 df3 = df2.select("test_kit_code", "brand", "lab", F.explode("array_col").alias("new_col"))
-
 sh_sps_df = df3.select("test_kit_code", "brand", "lab", "new_col.consumable", "new_col.count")
+
+sh_sps_df = sh_sps_df.filter(sh_sps_df['count']!=0)
 
 # COMMAND ----------
 
 # Save as a Parquet file
-sh_sps_df.write.parquet("dbfs:/path/to/sh_sps_df.parquet")
-
-# Retrieve sh_sps_df from the Parquet file
-sh_sps_df = spark.read.parquet("dbfs:/path/to/sh_sps_df.parquet")
+sh_sps_df.write.mode('overwrite').parquet("dbfs:/path/to/sh_sps_df.parquet")
 display(sh_sps_df)
 
 # COMMAND ----------
@@ -106,17 +107,14 @@ df2 = sh_tdl_df.withColumn("array_col", F.array([F.struct(F.lit(c).alias("consum
 
 # Transpose the array into multiple rows
 df3 = df2.select("test_kit_code", "brand", "lab", F.explode("array_col").alias("new_col"))
-
 sh_tdl_df = df3.select("test_kit_code", "brand", "lab", "new_col.consumable", "new_col.count")
+
+sh_tdl_df = sh_tdl_df.filter(sh_tdl_df['count']!=0)
 
 # COMMAND ----------
 
 # Save as a Parquet file
-sh_tdl_df.write.parquet("dbfs:/path/to/sh_tdl_df.parquet")
-
-# Retrieve sh_tdl_df from the Parquet file
-sh_tdl_df = spark.read.parquet("dbfs:/path/to/sh_tdl_df.parquet")
-
+sh_tdl_df.write.mode('overwrite').parquet("dbfs:/path/to/sh_tdl_df.parquet")
 display(sh_tdl_df)
 
 # COMMAND ----------
@@ -146,16 +144,14 @@ df2 = ireland_df.withColumn("array_col", F.array([F.struct(F.lit(c).alias("consu
 
 # Transpose the columns into multiple rows
 df3 = df2.select("test_kit_code", "brand", "lab", F.explode("array_col").alias("new_col"))
-
 ireland_df = df3.select("test_kit_code", "brand", "lab", "new_col.consumable", "new_col.count")
+
+ireland_df = ireland_df.filter(ireland_df['count']!=0)
 
 # COMMAND ----------
 
 # Save as a Parquet file
-ireland_df.write.parquet("dbfs:/path/to/ireland_df.parquet")
-
-# Read the Parquet file
-ireland_df = spark.read.parquet("dbfs:/path/to/ireland_df.parquet")
+ireland_df.write.mode('overwrite').parquet("dbfs:/path/to/ireland_df.parquet")
 display(ireland_df)
 
 # COMMAND ----------
@@ -185,16 +181,14 @@ df2 = freetest_df.withColumn("array_col", F.array([F.struct(F.lit(c).alias("cons
 
 # Explode the array into multiple rows
 df3 = df2.select("test_kit_code", "brand", "lab", F.explode("array_col").alias("new_col"))
-
 freetest_df = df3.select("test_kit_code", "brand", "lab", "new_col.consumable", "new_col.count")
+
+freetest_df = freetest_df.filter(freetest_df['count']!=0)
 
 # COMMAND ----------
 
 # Save as a Parquet file
-freetest_df.write.parquet("dbfs:/path/to/freetest_df.parquet")
-
-# Read the Parquet file
-freetest_df = spark.read.parquet("dbfs:/path/to/freetest_df.parquet")
+freetest_df.write.mode('overwrite').parquet("dbfs:/path/to/freetest_df.parquet")
 display(freetest_df)
 
 # COMMAND ----------
@@ -224,23 +218,20 @@ df2 = hepc_ireland_df.withColumn("array_col", F.array([F.struct(F.lit(c).alias("
 
 # Transpose the columns into multiple rows
 df3 = df2.select("test_kit_code", "brand", "lab", F.explode("array_col").alias("new_col"))
-
 hepc_ireland_df = df3.select("test_kit_code", "brand", "lab", "new_col.consumable", "new_col.count")
+
+hepc_ireland_df = hepc_ireland_df.filter(hepc_ireland_df['count']!=0)
 
 # COMMAND ----------
 
 # Save as a Parquet file
 hepc_ireland_df.write.mode('overwrite').parquet("dbfs:/path/to/hepc_ireland_df.parquet")
-
-# Read the Parquet file
-hepc_ireland_df = spark.read.parquet("dbfs:/path/to/hepc_ireland_df.parquet")
 display(hepc_ireland_df)
 
 # COMMAND ----------
 
 # DBTITLE 1,ARAS_ROMANIA
 #aras_romania
-from pyspark import SparkFiles
 
 path = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRORkKyB9jbaQ7TfpldxQI5zR_tFr4IXmHVPOfy56dORTyzxkumgZqV9k8kd_JwAD0kjAHm3XhfSxLM/pub?gid=136572926&single=true&output=csv"
 spark.sparkContext.addFile(path)
@@ -253,7 +244,6 @@ aras_romania_df = aras_romania_df.drop('test_sample','No of Instruction')
 # COMMAND ----------
 
 #aras_romania transpose columns
-import pyspark.sql.functions as F
 
 # Create a list of new column names, excluding "test_kit_code", "brand" and "lab"
 aras_romania_list = [col for col in aras_romania_df.columns if col not in ["test_kit_code", "brand", "lab"]]
@@ -263,18 +253,15 @@ df2 = aras_romania_df.withColumn("array_col", F.array([F.struct(F.lit(c).alias("
 
 # Transpose the columns into multiple rows
 df3 = df2.select("test_kit_code", "brand", "lab", F.explode("array_col").alias("new_col"))
-
-# Select the values from the new construct column
 aras_romania_df = df3.select("test_kit_code", "brand", "lab", "new_col.consumable", "new_col.count")
+
+aras_romania_df = aras_romania_df.filter(aras_romania_df['count']!=0)
 
 # COMMAND ----------
 
 # Save as a Parquet file
 aras_romania_df.write.mode('overwrite').parquet("dbfs:/path/to/aras_romania_df.parquet")
-
-# Read the Parquet
-aras_romania_df = spark.read.parquet("dbfs:/path/to/aras_romania_df.parquet")
-
+display(aras_romania_df) 
 
 # COMMAND ----------
 
@@ -303,26 +290,20 @@ df2 = medlab_df.withColumn("array_col", F.array([F.struct(F.lit(c).alias("consum
 
 # Transpose the columns into multiple rows
 df3 = df2.select("test_kit_code", "brand", "lab", F.explode("array_col").alias("new_col"))
-
 medlab_df = df3.select("test_kit_code", "brand", "lab", "new_col.consumable", "new_col.count")
+
+medlab_df = medlab_df.filter(medlab_df['count']!=0)
 
 # COMMAND ----------
 
 # Save as a Parquet file
-medlab_df.write.parquet("dbfs:/path/to/medlab_df.parquet")
-
-# Read the Parquet file
-medlab_df = spark.read.parquet("dbfs:/path/to/medlab_df.parquet")
+medlab_df.write.mode('overwrite').parquet("dbfs:/path/to/medlab_df.parquet")
 display(medlab_df)
 
 # COMMAND ----------
 
 # DBTITLE 1,Combine all eight dfs to one
 # combine all 8 tables
-from pyspark.sql import SparkSession
-
-spark = SparkSession.builder.getOrCreate()
-
 combined_df = fettle_df.unionByName(sh_sps_df).unionByName(sh_tdl_df).unionByName(ireland_df).unionByName(freetest_df).unionByName(hepc_ireland_df).unionByName(aras_romania_df).unionByName(medlab_df)
 display(combined_df)
 
@@ -330,13 +311,6 @@ display(combined_df)
 
 # Save the DataFrame as a Parquet file
 combined_df.write.mode('overwrite').parquet("dbfs:/path/to/new_combined_df.parquet")
-
-# Read the Parquet file into a DataFrame
-combined_df = spark.read.parquet("dbfs:/path/to/new_combined_df.parquet")
-
-# COMMAND ----------
-
-print(combined_df.count())
 
 # COMMAND ----------
 
@@ -363,7 +337,7 @@ bill_of_materials_df = no_zero_count_df.select([F.col(c).alias(c+'1') for c in n
 
 # COMMAND ----------
 
-# Save bill_of_materials as a Parquet file
+# Save as a Parquet file
 bill_of_materials_df.write.mode("overwrite").parquet("dbfs:/path/to/bill_of_materials_df.parquet")
 
 # COMMAND ----------
@@ -390,6 +364,17 @@ testkit_code_colour_df.write.mode('overwrite').parquet('dbfs:/path/to/code_colou
 
 # COMMAND ----------
 
+# DBTITLE 1,Testkit_code_colour_test_sample
+path = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRORkKyB9jbaQ7TfpldxQI5zR_tFr4IXmHVPOfy56dORTyzxkumgZqV9k8kd_JwAD0kjAHm3XhfSxLM/pub?gid=1997112257&single=true&output=csv"
+spark.sparkContext.addFile(path)
+
+testkit_code_colour_df = spark.read.csv("file://"+SparkFiles.get("pub"), header=True, inferSchema= True)
+
+#save as table
+testkit_code_colour_df.write.saveAsTable("testkit_colour_sample")
+
+# COMMAND ----------
+
 # DBTITLE 1,create a lab table 
 #create a lab table
 from pyspark.sql import SparkSession
@@ -408,10 +393,6 @@ lab_df = spark.createDataFrame(data, schema)
 #save lab table
 lab_df.write.mode('overwrite').parquet('dbfs:/path/to/lab.parquet')
 
-# Retrieve lab 
-lab_df = spark.read.parquet('dbfs:/path/to/lab.parquet')
-
-
 # COMMAND ----------
 
 # DBTITLE 1,create a brand table 
@@ -428,10 +409,6 @@ brand_df = spark.createDataFrame(data, schema)
 #save brand table
 brand_df.write.mode('overwrite').parquet('dbfs:/path/to/brand.parquet')
 
-# Retrieve
-brand_df = spark.read.parquet('dbfs:/path/to/brand.parquet')
-
-
 # COMMAND ----------
 
 # DBTITLE 1,create a consumable table - from google sheet
@@ -445,7 +422,6 @@ consumable_df = spark.read.csv("file://"+SparkFiles.get("pub"), header=True, inf
 
 #save table
 consumable_df.write.mode('overwrite').parquet('dbfs:/path/to/consumable.parquet')
-
 
 # COMMAND ----------
 

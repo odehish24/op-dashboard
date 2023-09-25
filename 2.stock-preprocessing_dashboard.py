@@ -1,8 +1,28 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC START FROM new1.getting_stock_data
+# MAGIC START FROM 1.stock notebook
 # MAGIC
-# MAGIC ###3. CREATE DAILY KIT CREATED TABLE
+# MAGIC ### CREATE DAILY KIT CREATED TABLE
+# MAGIC - 1. create brandlookup table that would map distribution_centres table testing_service attribute to match brand table sk attribute
+# MAGIC - 2. get daily kit created in 2023
+# MAGIC - 3. calculate consumable used 
+
+# COMMAND ----------
+
+# DBTITLE 1,Brand hookup table with testing_service
+# MAGIC %sql
+# MAGIC CREATE OR REPLACE TEMPORARY VIEW brand_lookup AS
+# MAGIC SELECT
+# MAGIC     sk,
+# MAGIC     testing_service
+# MAGIC FROM VALUES
+# MAGIC     (1, 0),
+# MAGIC     (2, 1),
+# MAGIC     (3, 3),
+# MAGIC     (4, 4),
+# MAGIC     (5, 5),
+# MAGIC     (6, 6)
+# MAGIC AS brand_lookup(sk, testing_service);
 
 # COMMAND ----------
 
@@ -20,7 +40,7 @@ kit_created = spark.sql("""
         tt.lab,
         tt.kit_type,
         eoc.brand AS brand1,
-        dc.testing_service AS brand2,
+        bl.sk AS brand2,
         COUNT(*) AS count
     FROM raw_admin.test_kits tt
         LEFT JOIN testkit_colour_sample tcs ON tcs.test_kit_code = tt.test_kit_code
@@ -28,6 +48,7 @@ kit_created = spark.sql("""
         LEFT JOIN raw_admin.episodes_of_care eoc ON sto.episode_of_care_id = eoc.id
         LEFT JOIN raw_admin.batches b ON b.id = tt.batch_id
         LEFT JOIN raw_admin.distribution_centres dc ON dc.id = b.distribution_centre_id
+        LEFT JOIN brand_lookup bl ON bl.sk = dc.testing_service
     WHERE tt.created_at > '2023-01-01 00:00:00.000'
     GROUP BY
         tt.id,
@@ -39,16 +60,16 @@ kit_created = spark.sql("""
         brand1,
         brand2
 """)
-kit_created.count()
 
 # COMMAND ----------
 
-# DBTITLE 1,Change brand1 values to brand ids to be identical with brand2
+# DBTITLE 1,Assign brand1 to the corresponding brand sk values 
+#the episodes_of_care table brand attribute renamed as brand1 above is mapped to the corresponding brand sk values
 from pyspark.sql.functions import col, when, lit
 
 brand_mapping = {
-    'fettle': 1,
-    'sh24': 0,
+    'sh24': 1,
+    'fettle': 2,
     'aras_romania': 3,
     'freetesting_hiv': 4,
     'sh24_ireland': 5,
@@ -82,19 +103,15 @@ kit_created3 = kit_created2.filter(col("brand2").isNotNull())
 
 # COMMAND ----------
 
-display(kit_created3)
-
-# COMMAND ----------
-
 #save df as table
 kit_created3.write.format("parquet").mode("overwrite").saveAsTable("kit_created")
 
-kit_created3.createOrReplaceTempView("kit_created")
+# kit_created3.createOrReplaceTempView("kit_created")
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ###4. Calculate consumables used per kit created
+# MAGIC ### Calculate consumables used per kit created
 
 # COMMAND ----------
 
@@ -119,23 +136,6 @@ kit_created3.createOrReplaceTempView("kit_created")
 
 # COMMAND ----------
 
-# DBTITLE 1,Brand hookup table with testing_service
-# MAGIC %sql
-# MAGIC CREATE OR REPLACE TEMPORARY VIEW brand_lookup AS
-# MAGIC SELECT
-# MAGIC     sk,
-# MAGIC     testing_service
-# MAGIC FROM VALUES
-# MAGIC     (1, 0),
-# MAGIC     (2, 1),
-# MAGIC     (3, 3),
-# MAGIC     (4, 4),
-# MAGIC     (5, 5),
-# MAGIC     (6, 6)
-# MAGIC AS brand_lookup(sk, testing_service);
-
-# COMMAND ----------
-
 # DBTITLE 1,Get the names of brand, lab, colour, consumable to replace the ids
 #replace the ids of brand, colour, lab, consumable with their full names 
 
@@ -150,23 +150,23 @@ sql_statement = '''
       cu.used
    FROM consumable_used cu
       LEFT JOIN consumables c ON c.con_id = cu.consumable1
-      LEFT JOIN brand_lookup bl ON bl.testing_service = cu.brand2
-      LEFT JOIN warehouse.brands b ON b.sk = bl.sk
+      LEFT JOIN warehouse.brands b ON b.sk = cu.brand2
       LEFT JOIN warehouse.labs l ON l.enum = cu.lab
       LEFT JOIN testkit_colour_sample tcs on tcs.test_kit_code = cu.test_kit_code;
 '''
 df = spark.sql(sql_statement)
-display(df)
-
-# COMMAND ----------
 
 #save df to consumable_used_tb table
 df.write.format("parquet").mode("overwrite").saveAsTable("consumable_used_tb")
 
 # COMMAND ----------
 
+display(df)
+
+# COMMAND ----------
+
 # MAGIC %md
-# MAGIC ###5. Calculate Stock level based on Stock Usage
+# MAGIC ### Calculate Stock level based on Stock Usage
 
 # COMMAND ----------
 
@@ -176,7 +176,7 @@ df.write.format("parquet").mode("overwrite").saveAsTable("consumable_used_tb")
 from pyspark import SparkFiles
 from pyspark.sql.functions import col, regexp_replace
 
-path = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQvualKidxOjIjDPQEiExsiFA18wIIno8y0qt_xTStd-FptmwHgtfN_PIbpM8nq5UtfnDaVc_ngSndF/pub?gid=1572502399&single=true&output=csv"
+path = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQvualKidxOjIjDPQEiExsiFA18wIIno8y0qt_xTStd-FptmwHgtfN_PIbpM8nq5UtfnDaVc_ngSndF/pub?gid=1323386964&single=true&output=csv"
 spark.sparkContext.addFile(path)
 
 qty_df = spark.read.csv("file://"+SparkFiles.get("pub"), header=True, inferSchema= True)
@@ -198,17 +198,17 @@ qty_df.createOrReplaceTempView("qty_df")
 # DBTITLE 1,Get current quantity in stock
 from pyspark.sql.functions import sum, col, when
 
-#Get stock used from 17june2023 to date
-june17 = df.filter(df.built_at > '2023-06-17 00:00:00')
+#Get stock used from 18Sept2023 to date
+sept18 = df.filter(df.built_at > '2023-09-18 20:00:00')
 
-# display only consumables and the total used from 17june23 to date
-june17 = june17.groupBy("consumable").agg(sum("used").alias("used"))
+# display only consumables and the total used from 18sept23 to date
+sept18 = sept18.groupBy("consumable").agg(sum("used").alias("used"))
 
 #rename consumable to avoid conflict
-june17 = june17.withColumnRenamed("consumable", "con")
+sept18 = sept18.withColumnRenamed("consumable", "con")
 
-########### Join qty_df with june17 ################
-joined_df = qty_df.join(june17, qty_df.Consumable == june17.con, how='left')
+########### Join qty_df with sept18 ################
+joined_df = qty_df.join(sept18, qty_df.Consumable == sept18.con, how='left')
 
 # Substract qty used from remaining total qty
 df = (joined_df
@@ -229,7 +229,7 @@ Qty_In_Stock_df.write.format("parquet").mode("overwrite").saveAsTable("qty_in_st
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ###notebook visuals
+# MAGIC ###Notebook visuals
 
 # COMMAND ----------
 
@@ -245,52 +245,3 @@ display(Qty_In_Stock_df.orderBy("consumable", ascending=True))
 
 # MAGIC %sql
 # MAGIC select sum(used) from consumable_used
-
-# COMMAND ----------
-
-from pyspark.sql.functions import date_trunc, sum
-
-# group by month
-monthly_used = df.groupBy(
-    date_trunc('Month', df.built_at).alias('Date'),
-    df.colour,
-    df.consumable,
-    df.brand,
-    df.lab
-).agg(
-    sum(df.used).alias('Used')
-)
-
-# COMMAND ----------
-
-display(monthly_used)
-
-# COMMAND ----------
-
-# DBTITLE 1,Get latest day Used
-from pyspark.sql.functions import col, sum, to_date, max
-
-# Get the latest date from the df
-max_date = df.select(max(to_date(col("built_at")))).first()[0]
-
-# Filter the rows for the most recent day and perform aggregation
-last_used_df = df \
-    .filter(to_date(col("built_at")) == max_date) \
-    .groupBy("consumable") \
-    .agg(sum("used").alias("total_used")) \
-    .orderBy("consumable")
-
-display(last_used_df)
-
-# COMMAND ----------
-
-from pyspark.sql.functions import col, sum, to_date, max
-
-# Get the colour latest date from the df
-
-colour_used_df = df \
-    .filter(to_date(col("built_at")) == max_date) \
-    .groupBy("colour", "consumable") \
-    .agg(sum("used").alias("total_used"))
-
-display(colour_used_df)

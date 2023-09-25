@@ -41,7 +41,6 @@ fettle_df = fettle_df.filter(fettle_df['count']!=0)
 
 # Save as a Parquet file
 fettle_df.write.mode('overwrite').parquet("dbfs:/path/to/fettle_df.parquet")
-display(fettle_df)
 
 # COMMAND ----------
 
@@ -78,7 +77,6 @@ sh_sps_df = sh_sps_df.filter(sh_sps_df['count']!=0)
 
 # Save as a Parquet file
 sh_sps_df.write.mode('overwrite').parquet("dbfs:/path/to/sh_sps_df.parquet")
-display(sh_sps_df)
 
 # COMMAND ----------
 
@@ -115,7 +113,6 @@ sh_tdl_df = sh_tdl_df.filter(sh_tdl_df['count']!=0)
 
 # Save as a Parquet file
 sh_tdl_df.write.mode('overwrite').parquet("dbfs:/path/to/sh_tdl_df.parquet")
-display(sh_tdl_df)
 
 # COMMAND ----------
 
@@ -152,7 +149,7 @@ ireland_df = ireland_df.filter(ireland_df['count']!=0)
 
 # Save as a Parquet file
 ireland_df.write.mode('overwrite').parquet("dbfs:/path/to/ireland_df.parquet")
-display(ireland_df)
+
 
 # COMMAND ----------
 
@@ -189,7 +186,6 @@ freetest_df = freetest_df.filter(freetest_df['count']!=0)
 
 # Save as a Parquet file
 freetest_df.write.mode('overwrite').parquet("dbfs:/path/to/freetest_df.parquet")
-display(freetest_df)
 
 # COMMAND ----------
 
@@ -226,7 +222,6 @@ hepc_ireland_df = hepc_ireland_df.filter(hepc_ireland_df['count']!=0)
 
 # Save as a Parquet file
 hepc_ireland_df.write.mode('overwrite').parquet("dbfs:/path/to/hepc_ireland_df.parquet")
-display(hepc_ireland_df)
 
 # COMMAND ----------
 
@@ -257,11 +252,8 @@ aras_romania_df = df3.select("test_kit_code", "brand", "lab", "new_col.consumabl
 
 aras_romania_df = aras_romania_df.filter(aras_romania_df['count']!=0)
 
-# COMMAND ----------
-
 # Save as a Parquet file
 aras_romania_df.write.mode('overwrite').parquet("dbfs:/path/to/aras_romania_df.parquet")
-display(aras_romania_df) 
 
 # COMMAND ----------
 

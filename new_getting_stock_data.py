@@ -173,15 +173,6 @@ df.write.saveAsTable("bill_of_mat")
 
 # COMMAND ----------
 
-display(df)
-
-# COMMAND ----------
-
-#errorrrrrrrrrrrrrrrrrrr of caching
-display(sh24_sps)
-
-# COMMAND ----------
-
 # MAGIC %md
 # MAGIC ###2. CREATE TESTKIT_COLOUR_SAMPLE AND CONSUMABLE TABLE
 
@@ -198,6 +189,19 @@ testkit_colour_sample.write.saveAsTable("testkit_colour_sample")
 
 # COMMAND ----------
 
+# DBTITLE 1,Get test_sample with sample_area from google sheet
+#test sample
+
+path = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR_hw28G0N5LMZiLDUYPCOm7gMIMezhmSRRmyl-tCuY1i_ughdGZELy-KeSgojmlYvt_htb9bdBkzVp/pub?gid=527444052&single=true&output=csv"
+spark.sparkContext.addFile(path)
+
+test_sample = spark.read.csv("file://"+SparkFiles.get("pub"), header=True, inferSchema= True)
+
+#save as table
+test_sample.write.saveAsTable("test_sample")
+
+# COMMAND ----------
+
 # DBTITLE 1,create a consumable table - from google sheet
 # create a consumables table from google sheet
 
@@ -211,9 +215,12 @@ consumable_df.write.saveAsTable("consumables")
 
 # COMMAND ----------
 
-# DBTITLE 1,Create Tables 
+# DBTITLE 1,SAVE ALL Tables 
 #save as table testkit_code_colour_sample
 testkit_colour_sample.write.saveAsTable("testkit_colour_sample")
+
+#save as table
+test_sample.write.saveAsTable("test_sample")
 
 #new bill of mat
 df.write.saveAsTable("bill_of_mat")

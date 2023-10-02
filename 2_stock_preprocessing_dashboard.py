@@ -1,7 +1,5 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC START FROM 1.stock notebook
-# MAGIC
 # MAGIC ### CREATE DAILY KIT CREATED TABLE
 # MAGIC - 1. create brandlookup table that would map distribution_centres table testing_service attribute to match brand table sk attribute
 # MAGIC - 2. get daily kit created in 2023
@@ -127,7 +125,7 @@ kit_created3.write.format("parquet").mode("overwrite").saveAsTable("kit_created"
 # MAGIC     bom.consumable1,
 # MAGIC     SUM(kc.count * bom.count1) AS used
 # MAGIC FROM kit_created AS kc
-# MAGIC LEFT JOIN bill_of_mat AS bom
+# MAGIC LEFT JOIN bill_of_materials AS bom
 # MAGIC   ON (kc.sample_sk = bom.sample_sk1) 
 # MAGIC   AND (kc.brand2 = bom.brand1) 
 # MAGIC   AND (kc.lab = bom.lab1)
@@ -149,7 +147,7 @@ sql_statement = '''
         WHEN cu.kit_type = 1 THEN 'Custom_kit' ELSE tcs.colour END AS colour, 
       cu.used
    FROM consumable_used cu
-      LEFT JOIN consumables c ON c.con_id = cu.consumable1
+      LEFT JOIN consumables c ON c.con_sk = cu.consumable1
       LEFT JOIN warehouse.brands b ON b.sk = cu.brand2
       LEFT JOIN warehouse.labs l ON l.enum = cu.lab
       LEFT JOIN testkit_colour_sample tcs on tcs.test_kit_code = cu.test_kit_code;

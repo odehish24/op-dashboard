@@ -6,6 +6,52 @@
 
 from pyspark import SparkFiles
 import pyspark.sql.functions as F
+from pyspark.sql.functions import udf
+from pyspark.sql.types import StringType
+
+# COMMAND ----------
+
+# DBTITLE 1,Extract test-sample-type from required_klasses to determine the kit consumables
+#Query to get all testkit_codes and required_klasses
+df = spark.sql("""
+    SELECT test_kit_code, required_klasses
+    FROM raw_admin.testkit_metadata 
+    """)
+
+#remove the {} curly braces from the required_klasses
+from pyspark.sql.functions import regexp_replace
+
+df = df.withColumn('required_klasses', regexp_replace('required_klasses', '[{}]', ''))
+
+# create a function that extract test-sample-type from required_klasses
+def extract_test_sample(row):
+    keywords = ['Treponemal', 'RPR', 'Blood', 'Urine', 'Oral', 'Anal', 'Vaginal']
+    found_keywords = []
+    blood_keywords = ['Treponemal', 'RPR', 'Blood']
+    blood_found = False
+
+    for keyword in keywords:
+        if keyword in row:
+            if keyword in blood_keywords and not blood_found:
+                found_keywords.append('Blood')
+                blood_found = True
+            elif keyword not in blood_keywords and keyword not in found_keywords:
+                found_keywords.append(keyword)
+                
+    # Return unique keywords as a comma-separated string
+    return ','.join(found_keywords)
+
+# Define the UDF
+extract_test_sample_udf = udf(extract_test_sample, StringType())
+
+# Create the new column (test_sample) by applying the UDF
+df = df.withColumn('test_sample', extract_test_sample_udf(df['required_klasses']))
+display(df)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ####Retrieve data from google sheet
 
 # COMMAND ----------
 
@@ -137,39 +183,8 @@ combined_df = (sh24_sps
                .unionByName(aras))
 
 # Save as table new bill_of materials
-combined_df.write.saveAsTable("bill_of_mat")
+combined_df.write.saveAsTable("bill_of_materials")
 
-
-# COMMAND ----------
-
-# DBTITLE 1,Another way to get the new bill of mat
-sql_statement = '''
-    WITH CTE AS (
-    select bm.test_kit_code1,
-        brand1,
-        lab1,
-        consumable1,
-        tc.sample_sk AS sample_sk1,
-        count1
-        from bill_of_materials bm
-        left join testkit_colour_sample tc ON tc.test_kit_code = bm.test_kit_code1
-    ) 
-    SELECT 
-        sample_sk1,
-        brand1,
-        lab1,
-        consumable1,
-        count1
-    FROM CTE
-    GROUP BY
-        sample_sk1,
-        brand1,
-        lab1,
-        consumable1,
-        count1    
-'''
-df = spark.sql(sql_statement)
-df.write.saveAsTable("bill_of_mat")
 
 # COMMAND ----------
 
@@ -222,8 +237,8 @@ testkit_colour_sample.write.saveAsTable("testkit_colour_sample")
 #save as table
 test_sample.write.saveAsTable("test_sample")
 
-#new bill of mat
-df.write.saveAsTable("bill_of_mat")
+#new bill of materials
+df.write.saveAsTable("bill_of_materials")
 
 #create table for consumables
 consumable_df.write.saveAsTable("consumables")
@@ -231,5 +246,10 @@ consumable_df.write.saveAsTable("consumables")
 
 # COMMAND ----------
 
+# DBTITLE 1,Remove all parquet files
+# MAGIC %fs rm -r dbfs:/path/to
+
+# COMMAND ----------
+
 # MAGIC %md
-# MAGIC CONTINUE FROM new2_preprocessing_stock_dashboard
+# MAGIC CONTINUE FROM preprocessing_stock_dashboard

@@ -65,19 +65,22 @@ def load_and_transform_data(spark, path):
     df = spark.read.csv("file://" + SparkFiles.get("pub"), header=True, inferSchema=True)
 
     # Exclude specified columns and combine others into an array column
-    brand_list = [col for col in df.columns if col not in ["sample_sk", "brand", "lab"]]
+    brand_list = [col for col in df.columns if col not in ["sample_sk", "brand_sk", "lab_enum"]]
 
-    df2 = df.withColumn("array_col", F.array([F.struct(F.lit(c).alias("consumable"), F.col(c).alias("count")) for c in brand_list]))
+    df2 = df.withColumn("array_col", F.array([F.struct(F.lit(c).alias("consumable_sk"), F.col(c).alias("count1")) for c in brand_list]))
 
     # Transpose the array into multiple rows
-    df3 = df2.select("sample_sk", "brand", "lab", F.explode("array_col").alias("new_col"))
-    df4 = df3.select("sample_sk", "brand", "lab", "new_col.consumable", "new_col.count")
+    df3 = df2.select("sample_sk", "brand_sk", "lab_enum", F.explode("array_col").alias("new_col"))
+    df4 = df3.select("sample_sk", "brand_sk", "lab_enum", "new_col.consumable_sk", "new_col.count1")
 
     # Filter out rows with 'count' equal to 0
-    df5 = df4.filter(df4['count'] != 0)
+    df5 = df4.filter(df4['count1'] != 0)
+
+    #change dtype to int
+    brand_df = df5.withColumn("consumable_sk", F.col("consumable_sk").cast("int"))
 
     #rename the column names add 1 this will differentiate it when joined with kit_created columns later
-    brand_df = df5.select([F.col(c).alias(c+'1') for c in df5.columns])
+    # brand_df = df5.select([F.col(c).alias(c+'1') for c in df5.columns])
 
     return brand_df
 
@@ -91,7 +94,7 @@ path1 = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR_hw28G0N5LMZiLDUYPCOm
 #call function
 sh24_sps = load_and_transform_data(spark, path1)
 sh24_sps.createOrReplaceTempView('sh24_sps')
-display(sh24_sps)
+
 
 # COMMAND ----------
 
@@ -101,7 +104,7 @@ path2 = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR_hw28G0N5LMZiLDUYPCOm
 #call function
 sh24_tdl = load_and_transform_data(spark, path2)
 sh24_tdl.createOrReplaceTempView('sh24_tdl')
-display(sh24_tdl)
+# display(sh24_tdl)
 
 # COMMAND ----------
 
@@ -111,7 +114,7 @@ path3 = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR_hw28G0N5LMZiLDUYPCOm
 #call function
 fettle = load_and_transform_data(spark, path3)
 fettle.createOrReplaceTempView('fettle')
-display(fettle)
+# display(fettle)
 
 # COMMAND ----------
 
@@ -123,7 +126,7 @@ path4 = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR_hw28G0N5LMZiLDUYPCOm
 ireland_enfer = load_and_transform_data(spark, path4)
 ireland_enfer.createOrReplaceTempView('ireland_enfer')
 
-display(ireland_enfer)
+# display(ireland_enfer)
 
 # COMMAND ----------
 
@@ -134,7 +137,7 @@ path5 = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR_hw28G0N5LMZiLDUYPCOm
 #call function
 ireland_medlab = load_and_transform_data(spark, path5)
 ireland_medlab.createOrReplaceTempView('ireland_medlab')
-display(ireland_medlab)
+# display(ireland_medlab)
 
 # COMMAND ----------
 
@@ -145,7 +148,7 @@ path6 = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR_hw28G0N5LMZiLDUYPCOm
 #call function
 hepc = load_and_transform_data(spark, path6)
 hepc.createOrReplaceTempView('hepc')
-display(hepc)
+# display(hepc)
 
 # COMMAND ----------
 
@@ -156,7 +159,7 @@ path7 = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR_hw28G0N5LMZiLDUYPCOm
 #call function
 freetesting = load_and_transform_data(spark, path7)
 freetesting.createOrReplaceTempView('freetesting')
-display(freetesting)
+# display(freetesting)
 
 # COMMAND ----------
 
@@ -168,7 +171,7 @@ path8 = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR_hw28G0N5LMZiLDUYPCOm
 #call function
 aras = load_and_transform_data(spark, path8)
 aras.createOrReplaceTempView('aras')
-display(aras)
+# display(aras)
 
 # COMMAND ----------
 
@@ -183,8 +186,19 @@ combined_df = (sh24_sps
                .unionByName(aras))
 
 # Save as table new bill_of materials
-combined_df.write.saveAsTable("bill_of_materials")
+# combined_df.write.saveAsTable("bill_of_materials")
 
+
+# COMMAND ----------
+
+# sh24_sps.write.mode("overwrite").saveAsTable("bill_of_materials")
+# sh24_tdl.write.mode("append").saveAsTable("bill_of_materials")
+# fettle.write.mode("append").saveAsTable("bill_of_materials")
+# ireland_enfer.write.mode("append").saveAsTable("bill_of_materials")
+# ireland_medlab.write.mode("append").saveAsTable("bill_of_materials")
+# hepc.write.mode("append").saveAsTable("bill_of_materials")
+# freetesting.write.mode("append").saveAsTable("bill_of_materials")
+# aras.write.mode("append").saveAsTable("bill_of_materials")
 
 # COMMAND ----------
 

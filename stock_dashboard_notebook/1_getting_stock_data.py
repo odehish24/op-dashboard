@@ -8,6 +8,7 @@ from pyspark import SparkFiles
 import pyspark.sql.functions as F
 from pyspark.sql.functions import udf
 from pyspark.sql.types import StringType
+from pyspark.sql.functions import regexp_replace
 
 # COMMAND ----------
 
@@ -19,9 +20,27 @@ df = spark.sql("""
     """)
 
 #remove the {} curly braces from the required_klasses
-from pyspark.sql.functions import regexp_replace
-
 df = df.withColumn('required_klasses', regexp_replace('required_klasses', '[{}]', ''))
+
+# Replace "::" with "_" to create test_names column
+df = df.withColumn('test_names', F.regexp_replace('required_klasses', '::', '_'))
+
+#count number of test in test_names columns
+df = df.withColumn('test_count', F.size(F.split('test_names', ',')))
+
+# drop column not needed
+df = df.drop('required_klasses')
+
+# COMMAND ----------
+
+# save as table
+# df.write.format("delta").mode("overwrite").saveAsTable("prod.default.test_names_count")
+
+# COMMAND ----------
+
+display(df)
+
+# COMMAND ----------
 
 # create a function that extract test-sample-type from required_klasses
 def extract_test_sample(row):
@@ -207,27 +226,35 @@ combined_df = (sh24_sps
 
 # COMMAND ----------
 
-# DBTITLE 1,Testkit_code_colour_test_sample
-path = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR_hw28G0N5LMZiLDUYPCOm7gMIMezhmSRRmyl-tCuY1i_ughdGZELy-KeSgojmlYvt_htb9bdBkzVp/pub?gid=1997112257&single=true&output=csv"
+# DBTITLE 1,Get sample_sites_medium from google sheet
+#sample_sites_medium
+
+path = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTsuq_Y4edq2OUMVeAizZ0IptsJXM6F3cMvcKHI-js3MAwDUplbRRoYZd7SIVXpcbmkvc16ibcoLaFV/pub?gid=527444052&single=true&output=csv"
 spark.sparkContext.addFile(path)
 
-testkit_colour_sample = spark.read.csv("file://"+SparkFiles.get("pub"), header=True, inferSchema= True)
+sample_sites = spark.read.csv("file://"+SparkFiles.get("pub"), header=True, inferSchema= True)
 
-#save as table
-testkit_colour_sample.write.saveAsTable("testkit_colour_sample")
+# save as table
+sample_sites.write.saveAsTable("sample_sites_medium")
 
 # COMMAND ----------
 
-# DBTITLE 1,Get test_sample with sample_area from google sheet
-#test sample
-
-path = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR_hw28G0N5LMZiLDUYPCOm7gMIMezhmSRRmyl-tCuY1i_ughdGZELy-KeSgojmlYvt_htb9bdBkzVp/pub?gid=527444052&single=true&output=csv"
+# DBTITLE 1,Testkitcode_colour_sample
+path = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTsuq_Y4edq2OUMVeAizZ0IptsJXM6F3cMvcKHI-js3MAwDUplbRRoYZd7SIVXpcbmkvc16ibcoLaFV/pub?gid=1997112257&single=true&output=csv"
 spark.sparkContext.addFile(path)
 
-test_sample = spark.read.csv("file://"+SparkFiles.get("pub"), header=True, inferSchema= True)
+testkitcode_colour_sample = spark.read.csv("file://"+SparkFiles.get("pub"), header=True, inferSchema= True)
 
-#save as table
-test_sample.write.saveAsTable("test_sample")
+# save as table
+testkitcode_colour_sample.write.saveAsTable("testkitcode_colour_sample")
+
+df = spark.sql('''
+               select test_kit_code, case when colour = 'NULL' then 'Custom' else colour end as colour, sample_sk from ttcs
+               ''')
+
+# COMMAND ----------
+
+display(testkitcode_colour_sample)
 
 # COMMAND ----------
 
@@ -239,17 +266,17 @@ spark.sparkContext.addFile(path)
 
 consumable_df = spark.read.csv("file://"+SparkFiles.get("pub"), header=True, inferSchema= True)
 
-#save table
+# save table
 consumable_df.write.saveAsTable("consumables")
 
 # COMMAND ----------
 
 # DBTITLE 1,SAVE ALL Tables 
 #save as table testkit_code_colour_sample
-testkit_colour_sample.write.saveAsTable("testkit_colour_sample")
+testkit_colour_sample.write.saveAsTable("testkitcode_colour_sample")
 
 #save as table
-test_sample.write.saveAsTable("test_sample")
+test_sample.write.saveAsTable("sample_sites_medium")
 
 #new bill of materials
 df.write.saveAsTable("bill_of_materials")

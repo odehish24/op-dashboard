@@ -16,7 +16,7 @@
 #                             select c.sh24_uid, c.brand_sk, sto.test_kit_code, tcs.sample_sk, c.order_created_at
 #                             from CTE c
 #                             LEFT join raw_admin.sti_test_orders sto ON sto.sh24_uid = c.sh24_uid
-#                             LEFT join testkit_colour_sample tcs on tcs.test_kit_code = sto.test_kit_code
+#                             LEFT join testkitcode_colour_sample tcs on tcs.test_kit_code = sto.test_kit_code
 #                """)
              
 # df.write.mode("overwrite").saveAsTable("prep_sti_order")
@@ -34,7 +34,7 @@ df = spark.sql("""with CTE AS (
                             select c.sh24_uid, c.brand_sk, sto.test_kit_code, tcs.sample_sk, c.order_created_at
                             from CTE c
                             LEFT join raw_admin.sti_test_orders sto ON sto.sh24_uid = c.sh24_uid
-                            LEFT join testkit_colour_sample tcs on tcs.test_kit_code = sto.test_kit_code
+                            LEFT join testkitcode_colour_sample tcs on tcs.test_kit_code = sto.test_kit_code
                """)
              
 df.write.mode("append").saveAsTable("prep_sti_order")

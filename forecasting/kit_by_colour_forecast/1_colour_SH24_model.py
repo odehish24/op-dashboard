@@ -1,7 +1,7 @@
 # Databricks notebook source
 # MAGIC %md
 # MAGIC ####XGBOOST model for SH24 brand
-# MAGIC - The data = STI Test kit orders from sales_events, sti_test_orders, testkit_colour_sample table
+# MAGIC - The data => STI Test kit orders from sales_events, sti_test_orders, testkitcode_colour_sample table
 # MAGIC - seperate the top test sample from the rest
 # MAGIC - Add feature engineering
 # MAGIC - Hypertuning
@@ -31,27 +31,23 @@ warnings.filterwarnings("ignore")
 # COMMAND ----------
 
 # DBTITLE 1,Select SH24 brand from STI TEST ORDERS
-#Select only SH24 brand from the prep data and convert to pandas df
+# Select only SH24 brand from the prep data and convert to pandas df
 df = spark.sql("""select * from prep_sti_order where brand_sk = 1
                     """).toPandas()
 
 # COMMAND ----------
 
 #display 
-df.head()
+df.tail()
 
 # COMMAND ----------
 
-# DBTITLE 1,Separate the test_kit_code into top and low 
-#Get the top 6 test_kit code (16% of product type contributes to 98.6% of the sti test orders)
+# DBTITLE 1,Separate the test_kit_code into top and low orders
+#Get the top 6 test_kit code (16% of product_type contributes to 98.6% of the sti test orders)
 toplist = [547, 544, 71, 68, 479, 3]
 top_df = df[df['test_kit_code'].isin(toplist)]
 print(top_df.shape)
 
-#Get the  rest (low orders)
-lowlist = [1, 3551, 2595, 2527, 546, 476, 4573, 545, 70, 2119, 69, 955, 2048, 4641, 4572, 4165, 4027, 680, 3143, 952, 683, 3072, 3619]
-low_df = df[df['test_kit_code'].isin(lowlist)]
-print(low_df.shape)
 
 # COMMAND ----------
 
@@ -90,8 +86,12 @@ def preprocessing(df):
 #Apply the preprocessing function to the top df
 prep = preprocessing(top_df)
 
+# Drop the last row of the dataframe
+prep = prep.drop(prep.index[-1])
+
 # COMMAND ----------
 
+# plot of STI test kit dispatched 2023 only
 prep[prep.index >= '2023-01-01'].plot(title='Order Count Over Time', figsize=(12, 4))
 
 
@@ -503,7 +503,7 @@ future_pd['preds'].plot(figsize=(12,4))
 # DBTITLE 1,Save predictions
 from pyspark.sql import SparkSession
 
-#select only the date and preds
+# select only the date and preds
 sh24_pd = future_pd[['preds']]
 
 # Convert daily index  to week starting from Monday
@@ -517,4 +517,6 @@ spark = SparkSession.builder.appName("sh24_colour_prediction").getOrCreate()
 spark_df = spark.createDataFrame(sh24_pd)
 
 # Save as a Parquet table
-spark_df.write.format("parquet").mode("overwrite").saveAsTable("sh24_colour_pred")
+spark.conf.set("spark.sql.legacy.allowCreatingManagedTableUsingNonemptyLocation","true")
+spark_df.write.format("delta").mode("overwrite").saveAsTable("sh24_colour_pred")
+

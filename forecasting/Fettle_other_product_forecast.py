@@ -5,7 +5,7 @@
 # MAGIC - Chlamydia Treatment            
 # MAGIC - Emergency contraception        
 # MAGIC - Combined oral contraception    
-# MAGIC - Insti kit               
+# MAGIC - Test at home - Insti kit & oraquick            
 # MAGIC - Condoms - Bolt on              
 # MAGIC - Lube - Bolt on                 
 
@@ -13,6 +13,7 @@
 
 import pandas as pd
 import numpy as np
+from datetime import timedelta
 import matplotlib.pyplot as plt
 
 from sklearn.metrics import mean_absolute_percentage_error
@@ -30,11 +31,16 @@ warnings.filterwarnings("ignore")
 
 # DBTITLE 1,Retrieve data needed
 df = spark.sql('''
-            SELECT sh24_uid, product_type, brand_sk, product_sk, order_created_at
+            SELECT sh24_uid, product_type, product_sk, order_created_at
             FROM warehouse.sales_events 
             WHERE product_type NOT IN ('STI Test kit', 'STI Test Result Set')
+            AND brand_sk = 2
                ''').toPandas()
 df.tail()
+
+# COMMAND ----------
+
+df.product_type.value_counts()
 
 # COMMAND ----------
 
@@ -63,25 +69,16 @@ def preprocess_weekly_date(df):
 # COMMAND ----------
 
 # DBTITLE 1,Create a function to generate a forecast df with the trained model
-#set no of forecast weeks
+# set no of forecast weeks
 steps = 16
 
 #function to generate a forecast df with the trained model
 def generate_forecast_df(final_model, steps=steps):
-    """
-    Parameters:
-        final_model: The trained SARIMA model or similar.
-        steps: The number of steps to forecast.
-    
-    Returns:
-        DataFrame containing the forecasted values, sorted by 'week'.
-    """
     forecast = final_model.forecast(steps=steps)
     new_pd = forecast.reset_index(name='preds')
     new_pd = new_pd.rename(columns={'index': 'week'}).assign(week=lambda x: pd.to_datetime(x['week']))
     new_pd.sort_values(by='week', ascending=True, inplace=True)
     new_pd.reset_index(drop=True, inplace=True)
-    
     return new_pd
 
 # new_df = generate_forecast_df(final_model, steps=16)
@@ -94,16 +91,13 @@ def generate_forecast_df(final_model, steps=steps):
 # COMMAND ----------
 
 pop = df[df['product_type']=='Progestogen only pill']
-pop.shape
-
-# COMMAND ----------
 
 # Apply the data preprocessing function
 pop1 = preprocess_weekly_date(pop)
 
 #remove last line due to incomplete data
 pop2 = pop1.iloc[:-1]
-pop2.plot()
+pop2.plot(figsize=(9,3))
 
 # COMMAND ----------
 
@@ -124,9 +118,6 @@ print(test.shape)
 model = SARIMAX(train['count_order'], order=(2, 2, 1), seasonal_order=(2, 1, 1, 18))
 model_fit = model.fit()
 
-#set no of forecast weeks
-steps = 16
-
 # Forecast 
 forecast = model_fit.forecast(steps=steps)
 
@@ -140,7 +131,7 @@ print(f"MAE: {mae}, RMSE: {rmse}, MAPE: {round(mape*100,2)}%")
 # COMMAND ----------
 
 # plot
-fig, ax = plt.subplots(figsize=(10, 3))
+fig, ax = plt.subplots(figsize=(12, 3))
 
 ax.plot(forecast, label='Forecast test')
 ax.plot(test.index, test['count_order'], label='True test')
@@ -157,9 +148,24 @@ pop_model = model.fit()
 # Apply generate Forecast df function
 pop_pd = generate_forecast_df(pop_model, steps=steps)
 
-#assign  product
+#assign 1 for pop product
 pop_pd['product'] = 1
 pop_pd.tail()
+
+# COMMAND ----------
+
+# Add 7 to pred to every alternate week
+alternate_weeks_mask = pop_pd['week'].dt.week % 2 != 0
+
+# Add 7 to the 'forecast' column where the mask is True
+pop_pd.loc[alternate_weeks_mask, 'preds'] += 7
+
+# COMMAND ----------
+
+plt.figure(figsize=(9, 3))
+plt.plot(pop_pd['week'], pop_pd['preds'])
+plt.ylim([0, plt.ylim()[1]])
+plt.show()
 
 # COMMAND ----------
 
@@ -170,9 +176,6 @@ pop_pd.tail()
 
 #Select only CT data
 ct = df[df['product_type']=='Chlamydia Treatment']
-ct.shape
-
-# COMMAND ----------
 
 #Apply the preprocessing function
 ct1 = preprocess_weekly_date(ct)
@@ -183,7 +186,11 @@ ct2.tail()
 
 # COMMAND ----------
 
-#split to train and test
+ct2.plot(figsize=(12, 3))
+
+# COMMAND ----------
+
+# split to train and test
 train = ct2.iloc[:-16]
 test =  ct2.iloc[-16:]
 
@@ -194,7 +201,7 @@ print(test.shape)
 # COMMAND ----------
 
 ### Fit ct SARIMA Model
-model = SARIMAX(train['count_order'], order=(2, 0, 0), seasonal_order=(0, 1, 2, 18))
+model = SARIMAX(train['count_order'], order=(2, 0, 1), seasonal_order=(0, 1, 1, 8))
 model_fit = model.fit()
 
 # Forecast 
@@ -210,7 +217,7 @@ print(f"MAE: {mae}, RMSE: {rmse}, MAPE: {round(mape*100,2)}%")
 # COMMAND ----------
 
 # plot the test and forecast
-fig, ax = plt.subplots(figsize=(10, 3))
+fig, ax = plt.subplots(figsize=(9, 3))
 
 ax.plot(forecast, label='Forecast test')
 ax.plot(test.index, test['count_order'], label='True test')
@@ -221,14 +228,30 @@ plt.show()
 # COMMAND ----------
 
 ### Train all ct data and Forecast with SARIMA Model
-model = SARIMAX(ct2['count_order'], order=(2, 0, 0), seasonal_order=(0, 1, 2, 18))
+model = SARIMAX(ct2['count_order'], order=(2, 0, 1), seasonal_order=(0, 1, 1, 8))
 ct_model = model.fit()
 
 # Apply Forecast df function
 ct_pd = generate_forecast_df(ct_model, steps=steps)
-#assign  product
+#assign  2 for CT product
 ct_pd['product'] = 2
 ct_pd.tail()
+
+# COMMAND ----------
+
+# Add to every alternate week and Add to the 'forecast' column where the mask is True
+alternate_weeks_mask = ct_pd['week'].dt.week % 2 != 0
+ct_pd.loc[alternate_weeks_mask, 'preds'] += 10
+
+alternate_weeks_mask = ct_pd['week'].dt.week % 3 != 0
+ct_pd.loc[alternate_weeks_mask, 'preds'] += 5
+
+# COMMAND ----------
+
+plt.figure(figsize=(9, 3))
+plt.plot(ct_pd['week'], ct_pd['preds'])
+plt.ylim([0, plt.ylim()[1]])
+plt.show()
 
 # COMMAND ----------
 
@@ -265,7 +288,7 @@ print(test.shape)
 # COMMAND ----------
 
 ### Train and Fit ec SARIMA Model
-model = SARIMAX(train['count_order'], order=(1, 1, 0), seasonal_order=(1, 1, 1, 8))
+model = SARIMAX(train['count_order'], order=(2, 1, 0), seasonal_order=(1, 1, 1, 8))
 model_fit = model.fit()
 
 # Forecast 
@@ -292,15 +315,28 @@ plt.show()
 # COMMAND ----------
 
 ### Train all EC forecast with SARIMA Model
-model = SARIMAX(ec2['count_order'], order=(1, 1, 0), seasonal_order=(1, 1, 1, 8))
+model = SARIMAX(ec2['count_order'],  order=(2, 1, 0), seasonal_order=(1, 1, 1, 8))
 ec_model = model.fit()
 
 # Apply the forecast to df function
 ec_pd = generate_forecast_df(ec_model, steps=steps)
 
-#assign  product
+#assign 3 to EC product
 ec_pd['product'] = 3
 ec_pd.tail()
+
+# COMMAND ----------
+
+# Add to every alternate week and Add to the 'forecast' column where the mask is True
+alternate_weeks_mask = ct_pd['week'].dt.week % 3 != 0
+ct_pd.loc[alternate_weeks_mask, 'preds'] += 5
+
+# COMMAND ----------
+
+plt.figure(figsize=(9, 3))
+plt.plot(ec_pd['week'], ec_pd['preds'])
+plt.ylim([0, plt.ylim()[1]])
+plt.show()
 
 # COMMAND ----------
 
@@ -310,9 +346,6 @@ ec_pd.tail()
 # COMMAND ----------
 
 coc = df[df['product_type']=='Combined oral contraception']
-coc.shape
-
-# COMMAND ----------
 
 #Apply the preprocess function
 coc1 = preprocess_weekly_date(coc)
@@ -333,7 +366,7 @@ print(test.shape)
 # COMMAND ----------
 
 ### Fit coc SARIMA Model
-model = SARIMAX(train['count_order'], order=(1, 1, 0), seasonal_order=(1, 1, 1, 15))
+model = SARIMAX(train['count_order'], order=(2, 1, 1), seasonal_order=(2, 1, 3, 10))
 model = model.fit()
 
 # Forecast 
@@ -360,15 +393,28 @@ plt.show()
 # COMMAND ----------
 
 ### Train all COC and forecast with SARIMA Model
-model = SARIMAX(coc2['count_order'], order=(1, 1, 0), seasonal_order=(1, 1, 1, 15))
+model = SARIMAX(coc2['count_order'], order=(2, 1, 1), seasonal_order=(2, 1, 3, 10))
 coc_model = model.fit()
 
 # Apply the forecast df function
 coc_pd = generate_forecast_df(coc_model, steps=steps)
 
-#assign  product
+#assign  4 to coc product
 coc_pd['product'] = 4
 coc_pd.tail()
+
+# COMMAND ----------
+
+# Add to every alternate week and Add to the 'forecast' column where the mask is True
+alternate_weeks_mask = coc_pd['week'].dt.week % 3 != 0
+coc_pd.loc[alternate_weeks_mask, 'preds'] += 5
+
+# COMMAND ----------
+
+plt.figure(figsize=(9, 3))
+plt.plot(coc_pd['week'], coc_pd['preds'])
+plt.ylim([0, plt.ylim()[1]])
+plt.show()
 
 # COMMAND ----------
 
@@ -378,35 +424,19 @@ coc_pd.tail()
 # COMMAND ----------
 
 inst = df[(df['product_type'] == 'Test at home kit') & (df['product_sk'] == 'insti-hiv-test')]
-inst.shape
-
-# COMMAND ----------
 
 #Apply the preprocess function
 inst1 = preprocess_weekly_date(inst)
 
 #remove last line
 inst1 = inst1.iloc[:-1]
-inst1.plot()
-
-# COMMAND ----------
-
-#Remove outliers
-
-# Calculate the mean of 'count_order' where the index > '2023-03-01'
-max_value = inst1.loc[inst1.index > '2023-03-01', 'count_order'].max()
-
-# Replace values in 'count_order' that are greater than 300 with the calculated mean
-inst1.loc[inst1['count_order'] > 300, 'count_order'] = max_value
-
-#remove the initial zero orders
-insti2 = inst1.loc[inst1.index > '2018-12-31']
+inst1.plot(figsize=(9,3))
 
 # COMMAND ----------
 
 #split train and test
-train = insti2.iloc[:-16]
-test =  insti2.iloc[-16:]
+train = inst1.iloc[:-16]
+test =  inst1.iloc[-16:]
 
 print(train.shape)
 print(test.shape)
@@ -414,7 +444,7 @@ print(test.shape)
 # COMMAND ----------
 
 ### Fit SARIMA Model
-model = SARIMAX(train['count_order'], order=(2, 1, 2), seasonal_order=(2, 1, 2, 6))
+model = SARIMAX(train['count_order'], order=(1, 0, 2), seasonal_order=(2, 1, 2, 10))
 model_fit = model.fit()
 
 # Forecast 
@@ -430,7 +460,7 @@ print(f"MAE: {mae}, RMSE: {rmse}, MAPE: {round(mape*100,2)}%")
 # COMMAND ----------
 
 # plot the test and forecast
-fig, ax = plt.subplots(figsize=(10, 3))
+fig, ax = plt.subplots(figsize=(9, 3))
 
 ax.plot(forecast, label='Forecast test')
 ax.plot(test.index, test['count_order'], label='True test')
@@ -441,7 +471,7 @@ plt.show()
 # COMMAND ----------
 
 ### Train all insti-kit data Forecast with SARIMA Model
-model = SARIMAX(insti2['count_order'], order=(2, 1, 2), seasonal_order=(2, 1, 2, 6))
+model = SARIMAX(inst1['count_order'], order=(2, 1, 2), seasonal_order=(2, 1, 2, 6))
 inst_model = model.fit()
 
 # Apply Forecast df function
@@ -453,145 +483,175 @@ inst_pd.tail()
 
 # COMMAND ----------
 
+# Add to every alternate week and Add to the 'forecast' column where the mask is True
+alternate_weeks_mask = inst_pd['week'].dt.week % 3 != 0
+inst_pd.loc[alternate_weeks_mask, 'preds'] += 10
+
+# COMMAND ----------
+
+plt.figure(figsize=(9, 3))
+plt.plot(inst_pd['week'], inst_pd['preds'])
+plt.ylim([0, plt.ylim()[1]])
+plt.show()
+
+# COMMAND ----------
+
 # MAGIC %md
-# MAGIC #### BOLT ON (Condoms and Lubes) #only for sh24
+# MAGIC ####PATCH
 
 # COMMAND ----------
 
-# DBTITLE 1,Retrieve only Condom bolt on data
-cbo = df[df['product_type']=='Condoms - Bolt on']
-cbo.shape
+patch = df[df['product_type']=='Patch']
 
 # COMMAND ----------
 
-#Apply preprocessing function
-cbo1 = preprocess_weekly_date(cbo)
-
-#remove last line
-cbo1 = cbo1.iloc[:-1]
-cbo1.tail()
+# Apply the data preprocessing function
+patch1 = preprocess_weekly_date(patch)
+patch1 = patch1.iloc[:-1]
+patch1.plot()
 
 # COMMAND ----------
 
-#split to train and test
-train = cbo1.iloc[:-16]
-test =  cbo1.iloc[-16:]
 
-print(train.shape)
-print(test.shape)
 
 # COMMAND ----------
 
-### Fit SARIMA Model
-model = SARIMAX(train['count_order'], order=(2, 1, 1), seasonal_order=(2, 1, 2, 8))
-model_fit = model.fit()
+# Select the last 16 weeks
+patch2 = patch1.iloc[-16:]
 
-# Forecast 
-forecast = model_fit.forecast(steps=steps)
+# Convert the index to a datetime index 
+patch2.index = pd.to_datetime(patch2.index)
 
-# Evaluate error
-mae = mean_absolute_error(test['count_order'], forecast)
-rmse = np.sqrt(mean_squared_error(test['count_order'], forecast))
-mape = mean_absolute_percentage_error(test['count_order'], forecast)
+# Get the last date from the index
+last_date = patch2.index[-1]
+# Create a new date range for the next 16 weeks, starting after the last date
+new_dates = pd.date_range(start=last_date + timedelta(days=7), periods=16, freq='W-MON')
 
-print(f"MAE: {mae}, RMSE: {rmse}, MAPE: {round(mape*100,2)}%")
+# ressign the last 16 orders
+new_preds = patch2['count_order'].values
 
-# COMMAND ----------
+# Create a new DataFrame with the new dates and the count_order values
+patch_pd = pd.DataFrame(new_preds, index=new_dates, columns=['preds'])
 
-# plot the test and forecast
-fig, ax = plt.subplots(figsize=(10, 3))
+#Add 8 to last 8 weeks 
+patch_pd['preds'].iloc[-8:] += 8
 
-ax.plot(forecast, label='Forecast test')
-ax.plot(test.index, test['count_order'], label='True test')
-ax.set_ylim([0, ax.get_ylim()[1]])
-ax.legend()
-plt.show()
-
-# COMMAND ----------
-
-### Forecast with cond SARIMA Model
-model = SARIMAX(cbo1['count_order'], order=(2, 1, 1), seasonal_order=(2, 1, 2, 8))
-cbo_model = model.fit()
-
-# Apply Forecast df function
-cbo_pd = generate_forecast_df(cbo_model, steps=steps)
-
-#assign  6 to condom bolt-on product
-cbo_pd['product'] = 6
-cbo_pd.tail()
+#assign  8 to patch product
+patch_pd['product'] = 8
+patch_pd.reset_index(inplace=True)
+patch_pd.rename(columns={'index': 'week'}, inplace=True)
+patch_pd
 
 # COMMAND ----------
 
-# DBTITLE 1,Lube - Bolt on
-lbo = df[df['product_type']=='Lube - Bolt on']
-lbo.shape
+# MAGIC %md
+# MAGIC ####Injectable
 
 # COMMAND ----------
 
-#Apply the preprocess function
-lbo1 = preprocess_weekly_date(lbo)
-
-#remove last line
-lbo1 = lbo1.iloc[:-1]
-lbo1.tail()
+inject = df[df['product_type']=='Injectable']
+inject1 = preprocess_weekly_date(inject)
+inject1 = inject1.iloc[:-1]
+inject1.plot()
 
 # COMMAND ----------
 
-#split to train and test
-train = lbo1.iloc[:-16]
-test =  lbo1.iloc[-16:]
+# # Select the last 16 weeks
+# inject2 = inject1.iloc[-16:]
 
-print(train.shape)
-print(test.shape)
+# # Convert the index to a datetime index 
+# inject2.index = pd.to_datetime(inject2.index)
 
-# COMMAND ----------
+# # Get the last date from the index
+# last_date = inject2.index[-1]
+# # Create a new date range for the next 16 weeks, starting after the last date
+# new_dates = pd.date_range(start=last_date + timedelta(days=7), periods=16, freq='W-MON')
 
-### Fit bo SARIMA Model
-model = SARIMAX(train['count_order'], order=(2, 1, 1), seasonal_order=(2, 1, 2, 10))
-model_fit = model.fit()
+# # ressign the last 16 orders
+# new_preds = inject2['count_order'].values
 
-# Forecast 
-forecast = model_fit.forecast(steps=steps)
+# # Create a new DataFrame with the new dates and the count_order values
+# inject_pd = pd.DataFrame(new_preds, index=new_dates, columns=['preds'])
 
-# Evaluate error
-mae = mean_absolute_error(test['count_order'], forecast)
-rmse = np.sqrt(mean_squared_error(test['count_order'], forecast))
-mape = mean_absolute_percentage_error(test['count_order'], forecast)
+# # Add 4 to last 8 weeks 
+# inject_pd['preds'].iloc[-8:] += 4
 
-print(f"MAE: {mae}, RMSE: {rmse}, MAPE: {round(mape*100,2)}%")
-
-# COMMAND ----------
-
-# plot the test and forecast
-fig, ax = plt.subplots(figsize=(10, 3))
-
-ax.plot(forecast, label='Forecast test')
-ax.plot(test.index, test['count_order'], label='True test')
-ax.set_ylim([0, ax.get_ylim()[1]])
-ax.legend()
-plt.show()
+# #assign  12 to injectable product
+# inject_pd['product'] = 12
+# inject_pd.reset_index(inplace=True)
+# inject_pd.rename(columns={'index': 'week'}, inplace=True)
+# inject_pd
 
 # COMMAND ----------
 
-### Forecast with lbo SARIMA Model
-model = SARIMAX(lbo1['count_order'], order=(2, 1, 1), seasonal_order=(2, 1, 2, 10))
-lbo_model = model.fit()
 
-# Apply Forecast df function
-lbo_pd = generate_forecast_df(lbo_model, steps=steps)
-
-#assign  7 to lube bolt-on product
-lbo_pd['product'] = 7
-lbo_pd.tail()
 
 # COMMAND ----------
 
-####Merge all forecast to one and save table
+# Add to every alternate week and Add to the 'forecast' column where the mask is True
+alternate_weeks_mask = coc_pd['week'].dt.week % 3 != 0
+coc_pd.loc[alternate_weeks_mask, 'preds'] += 5
 
 # COMMAND ----------
 
-merged = pd.concat([pop_pd, ct_pd, ec_pd, coc_pd, inst_pd, cbo_pd, lbo_pd]).reset_index(drop=True)
+# MAGIC %md
+# MAGIC ####Ring 
+
+# COMMAND ----------
+
+ring = df[df['product_type']=='Ring']
+ring1 = preprocess_weekly_date(ring)
+ring1 = ring1.iloc[:-1]
+ring1.plot()
+
+# COMMAND ----------
+
+# Select the last 16 weeks
+ring2 = ring1.iloc[-16:]
+
+# Convert the index to a datetime index 
+ring2.index = pd.to_datetime(ring2.index)
+
+# Get the last date from the index
+last_date = ring2.index[-1]
+# Create a new date range for the next 16 weeks, starting after the last date
+new_dates = pd.date_range(start=last_date + timedelta(days=7), periods=16, freq='W-MON')
+
+# ressign the last 16 orders
+new_preds = ring2['count_order'].values
+
+# Create a new DataFrame with the new dates and the count_order values
+ring_pd = pd.DataFrame(new_preds, index=new_dates, columns=['preds'])
+
+# Add 3 to last 8 weeks 
+ring_pd['preds'].iloc[-8:] += 3
+
+#assign  14 to ring product
+ring_pd['product'] = 14
+ring_pd.reset_index(inplace=True)
+ring_pd.rename(columns={'index': 'week'}, inplace=True)
+ring_pd
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ####Merge all forecast to one and save table
+
+# COMMAND ----------
+
+# all_pd = spark.sql('''select * from other_products_pred''').toPandas()
+# merged = pd.concat([all_pd, phd_pd, wart_pd, pregt_pd, inject_pd, herp_pd, ring_pd]).reset_index(drop=True)
+# merged['preds'] = np.ceil(merged['preds'])
+
+# COMMAND ----------
+
+merged = pd.concat([pop_pd, coc_pd, ec_pd, inst_pd, ct_pd]).reset_index(drop=True)
 merged['preds'] = np.ceil(merged['preds'])
+
+# COMMAND ----------
+
+# merged = pd.concat([pop_pd, ct_pd, ec_pd, coc_pd, inst_pd, cbo_pd, lbo_pd, patch_pd]).reset_index(drop=True)
+# merged['preds'] = np.ceil(merged['preds'])
 
 # COMMAND ----------
 
@@ -599,17 +659,19 @@ display(merged)
 
 # COMMAND ----------
 
-#Save the merged predictions
+# Save the merged predictions
 from pyspark.sql import SparkSession
 
 # Initialize Spark Session
-spark = SparkSession.builder.appName("other_products_prediction").getOrCreate()
+spark = SparkSession.builder.appName("fettle_products_prediction").getOrCreate()
 
 # Convert Pandas DataFrame to Spark DataFrame
 spark_df = spark.createDataFrame(merged)
 
-# Save as a Parquet table
-spark_df.write.format("parquet").mode("overwrite").saveAsTable("other_products_pred")
+# Save as a table
+spark.conf.set("spark.sql.legacy.allowCreatingManagedTableUsingNonemptyLocation","true")
+spark_df.write.format("delta").mode("overwrite").saveAsTable("fettle_products_pred")
+
 
 # COMMAND ----------
 

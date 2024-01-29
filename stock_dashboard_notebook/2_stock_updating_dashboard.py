@@ -15,18 +15,17 @@ from pyspark.sql import functions as F
 
 # MAGIC %md
 # MAGIC This query below get the daily kit created with their respective brand, lab, kit_type and test_kit_code
-# MAGIC - kit_type : When 0 it means custom kit and 1 is regular kit
-# MAGIC - brand mapping: brand1 is transformed from the brand column in episodes_of_care table to map string names to integer identifiers.
-# MAGIC - brand2 transformed from the testing_service column in distribution_centres map existing it brand codes to correspond with sk in brand table.
-# MAGIC - count: creates record of one row as count o an order
+# MAGIC - brand1 mapping: brand1 is transformed from the brand column in episodes_of_care table to map string names to integer identifiers.
+# MAGIC - brand_sk transformed from the testing_service column in distribution_centres table map it brand codes to correspond with sk in brand table.
+# MAGIC - total_count: creates record of one row as count o an order
 
 # COMMAND ----------
 
-# DBTITLE 1,Get daily kit created 
+# DBTITLE 1,Get daily kit Dispatched
 kit_created1 = spark.sql("""
     SELECT 
         tt.id,
-        CAST(tt.dispatched_at AS timestamp) AS built_at, 
+        CAST(tt.dispatched_at AS timestamp) AS dispatched_at, 
         tt.test_kit_code,
         tcs.sample_sk,
         tt.lab,
@@ -46,15 +45,15 @@ kit_created1 = spark.sql("""
             WHEN 1 THEN 2
             ELSE dc.testing_service
         END AS brand_sk,
-        COUNT(*) AS count
+        COUNT(*) AS total_count
     FROM raw_admin.test_kits tt
-        LEFT JOIN testkit_colour_sample tcs ON tcs.test_kit_code = tt.test_kit_code
+        LEFT JOIN default.testkitcode_colour_sample tcs ON tcs.test_kit_code = tt.test_kit_code
         LEFT JOIN raw_admin.sti_test_orders sto ON tt.sti_test_order_id = sto.id
         LEFT JOIN raw_admin.episodes_of_care eoc ON sto.episode_of_care_id = eoc.id
         LEFT JOIN raw_admin.batches b ON b.id = tt.batch_id
         LEFT JOIN raw_admin.distribution_centres dc ON dc.id = b.distribution_centre_id
-    WHERE tt.dispatched_at > 
-            (SELECT MAX(built_at) FROM kit_created)
+    WHERE tt.dispatched_at >
+                (SELECT MAX(dispatched_at) FROM default.kit_created)
     GROUP BY
         tt.id,
         CAST(tt.dispatched_at AS timestamp), 
@@ -83,16 +82,16 @@ kit_created1.createOrReplaceTempView("kit_created1")
 kit_created2 = spark.sql('''
     SELECT
         id, 
-        built_at, 
+        dispatched_at, 
         test_kit_code, 
         sample_sk, 
         lab AS lab_enum, 
         kit_type,
         COALESCE(brand_sk, brand1) AS brand_sk,
-        count
+        total_count
     FROM kit_created1
-    WHERE built_at IS NOT NULL AND COALESCE(brand_sk, brand1) IS NOT NULL   
-                           ''')
+        WHERE dispatched_at IS NOT NULL OR dispatched_at !='NULL' AND COALESCE(brand_sk, brand1) IS NOT NULL   
+    ''')
 # Update main table
 kit_created2.write.mode("append").saveAsTable("kit_created")
 
@@ -106,22 +105,23 @@ kit_created2.write.mode("append").saveAsTable("kit_created")
 # DBTITLE 1,Retrieve the latest kits created to determine the consumables used
 sql_statement = """
         SELECT 
-            kc.built_at,
+            kc.dispatched_at,
             kc.test_kit_code,
             kc.sample_sk,
             kc.brand_sk,
             kc.lab_enum,
             kc.kit_type,
             bom.consumable_sk,
-            SUM(kc.count * bom.count1) AS used
-        FROM kit_created AS kc
-        LEFT JOIN bill_of_materials AS bom
+            SUM(kc.total_count * bom.count1) AS used
+        FROM default.kit_created AS kc
+        LEFT JOIN default.bill_of_materials AS bom
             ON (kc.sample_sk = bom.sample_sk) 
             AND (kc.brand_sk = bom.brand_sk) 
             AND (kc.lab_enum = bom.lab_enum)
-        WHERE built_at >  (SELECT MAX(built_at) FROM consumable_used)       
+        WHERE dispatched_at >  
+                    (SELECT MAX(dispatched_at) FROM default.consumable_used)       
         GROUP BY 
-            kc.built_at, 
+            kc.dispatched_at, 
             kc.test_kit_code, 
             kc.sample_sk, 
             kc.brand_sk, 
@@ -129,12 +129,10 @@ sql_statement = """
             kc.kit_type, 
             bom.consumable_sk
 """
-
 consumable_used1 = spark.sql(sql_statement)
 
 # Update consumable_used table
 consumable_used1.write.mode("append").saveAsTable("consumable_used")
-
 
 # COMMAND ----------
 
@@ -152,12 +150,18 @@ consumable_used1.write.mode("append").saveAsTable("consumable_used")
 # DBTITLE 1,Get Quantity in Stock - from supplies tracker google sheet
 # Get quantity in stock from supplies tracker as at 16 october 2023
 path = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQvualKidxOjIjDPQEiExsiFA18wIIno8y0qt_xTStd-FptmwHgtfN_PIbpM8nq5UtfnDaVc_ngSndF/pub?gid=1323386964&single=true&output=csv"
-spark.sparkContext.addFile(path)
 
-qty_df = spark.read.csv("file://"+SparkFiles.get("pub"), header=True, inferSchema= True)
+# Load CSV file using a Python pandas DataFrame
+import pandas as pd
+pdf = pd.read_csv(path)
+
+# Convert pandas DataFrame to Spark DataFrame
+from pyspark.sql.types import *
+schema = StructType([StructField(col, StringType(), True) for col in pdf.columns])
+sdf = spark.createDataFrame(pdf, schema)
 
 # save as temporary view
-qty_df.createOrReplaceTempView("qty_temp_view")
+sdf.createOrReplaceTempView("qty_temp_view")
 
 sql_statement = """
     SELECT 
@@ -170,7 +174,7 @@ sql_statement = """
 qty_in_df = spark.sql(sql_statement)
 
 # Save as a table
-qty_in_df.write.format("parquet").mode("overwrite").saveAsTable("qty_in_stock")
+qty_in_df.write.mode("overwrite").saveAsTable("default.qty_in_stock")
 
 # COMMAND ----------
 

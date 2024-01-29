@@ -297,10 +297,6 @@ ax.set_ylim([0, ax.get_ylim()[1]])
 
 # COMMAND ----------
 
-fettle_pd
-
-# COMMAND ----------
-
 # DBTITLE 1,Save predictions
 from pyspark.sql import SparkSession
 
@@ -316,9 +312,6 @@ spark = SparkSession.builder.appName("fettle_colour_prediction").getOrCreate()
 # Convert Pandas DataFrame to Spark DataFrame
 spark_df = spark.createDataFrame(fettle_pd)
 
-# Save as a Parquet table
-spark_df.write.format("parquet").mode("overwrite").saveAsTable("fettle_colour_pred")
-
-# COMMAND ----------
-
-
+# Save as a table
+spark.conf.set("spark.sql.legacy.allowCreatingManagedTableUsingNonemptyLocation","true")
+spark_df.write.format("delta").mode("overwrite").saveAsTable("fettle_colour_pred")

@@ -27,17 +27,16 @@ def previous_weeks_data(df):
 
 # DBTITLE 1,function to get the distribution of the top_test_sample
 # get percentage of sample_test value counts from previous weeks
-def get_sample_percentage(df, column_name):
-    value_counts = df[column_name].value_counts()
-    total_rows = len(df)
-    percentage_counts = (value_counts / total_rows) 
-    return percentage_counts.to_dict()
+def get_sample_percentage(df, sample_column):
+    value_counts = df[sample_column].value_counts(normalize=True)
+    sample_percentages = value_counts.to_dict()
+    return sample_percentages
 
 
-# function to add test_sample percentage to the pred df
-def add_sample_percentage(df, column_name, percentages):
-    for new_col, percentage in percentages.items():
-        df[new_col] = df[column_name] * (percentage)        
+# function to extract sample_sk percentage to the pred df
+def add_sample_percentage(df, pred_column, sample_percentages):
+    for new_col, percentage in sample_percentages.items():
+        df[new_col] = df[pred_column] * (percentage)        
     return df
 
 
@@ -114,7 +113,7 @@ sample_percentage = get_sample_percentage(sh_top_previous_weeks, 'sample_sk')
 # Apply add_sample_percentage function
 sh_top_pd = add_sample_percentage(sh24_pred, 'preds', sample_percentage)
 
-#drop column not needed anymore
+# drop column not needed anymore
 sh_top_pd.drop("preds", axis=1, inplace=True)
 
 # COMMAND ----------
@@ -421,6 +420,7 @@ all_df
 
 # COMMAND ----------
 
+# Retrieve bom
 df_bom = spark.sql("""
                    SELECT sample_sk, brand_sk, bm.lab_enum, consumable_sk, c.consumable, count1 
                    FROM bill_of_materials bm 
@@ -442,11 +442,7 @@ result = grouped_df.apply(lambda x: (x['count_preds'] * x['count1']).sum()).rese
 
 # COMMAND ----------
 
-display(result)
-
-# COMMAND ----------
-
-#Save the predictions
+# Save the predictions
 from pyspark.sql import SparkSession
 
 # Initialize Spark Session

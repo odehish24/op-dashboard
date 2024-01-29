@@ -41,10 +41,6 @@ df.tail()
 
 # COMMAND ----------
 
-
-
-# COMMAND ----------
-
 # DBTITLE 1,Separate the test_sample size into top and low 
 #Get the top 6 test_sample(16% of product type contributes to 98.6% of the sti test orders)
 toplist = [31, 18, 10, 23, 14, 3]

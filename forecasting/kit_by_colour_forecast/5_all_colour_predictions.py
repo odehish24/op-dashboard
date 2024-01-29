@@ -1,6 +1,6 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC ###Kit Consumables Predictions
+# MAGIC ###Kit by Colour Forecast
 # MAGIC - Retrieve pred table from all brands
 # MAGIC - Assign test_samples, lab and brand
 # MAGIC - Calculate consumables 
@@ -25,19 +25,18 @@ def previous_weeks_data(df):
 # COMMAND ----------
 
 # DBTITLE 1,function to get the distribution of the top_test_kit_code
-#get percentage of testkit_code value counts from previous months
-def get_testkitcode_percentage(df, column_name):
-    value_counts = df[column_name].value_counts()
-    total_rows = len(df)
-    percentage_counts = (value_counts / total_rows) 
-    return percentage_counts.to_dict()
+# get percentage of testkitcode value counts from previous weeks
+def get_testkitcode_percentage(df, testkitcode_column):
+    value_counts = df[testkitcode_column].value_counts(normalize=True)
+    testkitcode_percentages = value_counts.to_dict()
+    return testkitcode_percentages
 
-#function to add test_sample percentage to the pred df
-def add_testkitcode_percentage(df, column_name, percentages):
-    for new_col, percentage in percentages.items():
-        df[new_col] = df[column_name] * (percentage)        
+
+# function to extract testkitcode percentage to the pred df
+def add_testkitcode_percentage(df, pred_column, testkitcode_percentages):
+    for new_col, percentage in testkitcode_percentages.items():
+        df[new_col] = df[pred_column] * (percentage)        
     return df
-
 
 # COMMAND ----------
 
@@ -62,7 +61,6 @@ def preprocess_weekly_date(df):
     df1 = df1.groupby([ 'week','test_kit_code']).size().reset_index(name='count_order')
     return df1
 
-
 # COMMAND ----------
 
 #function to pivot the weekly df
@@ -76,7 +74,7 @@ def pivot_data(df):
 
     # Fill missing values with 0
     pivot_df.fillna(0, inplace=True)
-
+    
     return pivot_df
 
 # COMMAND ----------
@@ -87,8 +85,7 @@ def pivot_data(df):
 # COMMAND ----------
 
 # Retrieve Sh24 data
-sh24_pred = spark.sql("""select * from sh24_colour_pred where week > '2023-11-01'
-                    """).toPandas()
+sh24_pred = spark.sql("""select * from sh24_colour_pred""").toPandas()
 sh = spark.sql("""select * from prep_sti_order where brand_sk = 1 and order_created_at > '2023-06-01'
                     """).toPandas()
 
@@ -97,24 +94,18 @@ toplist = [547, 544, 71, 68, 479]
 sh_top = sh[sh['test_kit_code'].isin(toplist)]
 
 # Get the  rest (low orders)
-lowlist = [3, 1, 136, 3551, 2595, 2527, 546, 476, 4573, 545, 70, 2119, 69, 955, 2048, 4641, 4572, 4165, 4027, 680, 3143, 952, 683, 3072, 3619]
+lowlist = [1,2,3,136,272,408,4640,3617,545,546,2595,4641,3619,680,683,952,5049,1979,4027,955,3141,69,70,2119,4165,3143,204,4301,207,2255,6620,5597,477,7645,6621,478,1503,4572,476,4573,3551,2527]
 sh_low = sh[sh['test_kit_code'].isin(lowlist)]
 
 # COMMAND ----------
 
-# Reduce all values in the 'preds' column by 10%
-sh24_pred['preds'] = sh24_pred['preds'] * (1 - 0.10)
+# remove last line
+sh24_pred.drop(sh24_pred.index[-1], inplace=True)
 sh24_pred
 
 # COMMAND ----------
 
-# # Add 5500 preds to week '2023-01-29'
-# df1.loc[df1['week'] == '2024-01-29', 'preds'] += 5500
-# df1
-
-# COMMAND ----------
-
-# DBTITLE 1,Apply Functions to top
+# DBTITLE 1,Apply Functions to top orders
 # SH24 Apply the previous_weeks_data function for sh_top
 sh_top_previous_weeks = previous_weeks_data(sh_top)
 
@@ -122,26 +113,10 @@ sh_top_previous_weeks = previous_weeks_data(sh_top)
 get_percentage = get_testkitcode_percentage(sh_top_previous_weeks, 'test_kit_code')
 
 # Apply add_sample_percentage function
-# sh_top_pd = add_testkitcode_percentage(sh24_pred, 'preds', get_percentage)
 sh_top_pd = add_testkitcode_percentage(sh24_pred, 'preds', get_percentage)
 
-# #drop column not needed anymore
+# drop column not needed anymore
 sh_top_pd.drop("preds", axis=1, inplace=True)
-
-# # remove 10% from 547 -red kit
-# sh_top_pd.iloc[:, 1] = sh_top_pd.iloc[:, 1] * 0.85
-# sh_top_pd.iloc[:, 1] = sh_top_pd.iloc[:, 3] * 0.9
-# sh_top_pd.iloc[:, 1] = sh_top_pd.iloc[:, 5] * 0.9
-# sh_top_pd.iloc[:, 1] = sh_top_pd.iloc[:, 4] * 0.93
-
-# COMMAND ----------
-
-# # add 10% from 544 -blue kit
-# sh_top_pd.iloc[:, 2] = sh_top_pd.iloc[:, 2] * 1.10
-
-# COMMAND ----------
-
-sh_top_pd
 
 # COMMAND ----------
 
@@ -176,30 +151,39 @@ sh_join_pd.tail()
 # COMMAND ----------
 
 # DBTITLE 1,SH24 Assign the brand and lab to the df
-# Create a function to assign lab (59% assigned to SPS(2) and the rest to TDL(0))
-def sh24_assign_lab_brand(df):
+# Create a function to assign lab and brand
+def sh24_lab_brand(df):
     # unpivot df
     df = pd.melt(df, id_vars=['week'], var_name='test_kit_code', value_name='count_preds')
     df['count_preds'] = np.ceil(df['count_preds'])
     
-    num_rows = len(df)
-    num_sps = int(np.ceil(0.58 * num_rows))
-    lab_values = [2] * num_sps + [0] * (num_rows - num_sps)
-    np.random.shuffle(lab_values)
-    df['lab'] = lab_values
-    
+    #Assign lab %
+    df['sps'] = (df['count_preds'] * 0.58).astype(int)  
+    df['tdl'] = df['count_preds'] - df['sps']
+    df.drop('count_preds', axis=1, inplace=True)
+
+    # First, add a unique ID column to preserve the relationship between the new rows
+    df['id'] = df.index
+
+    # Now melt the DataFrame to unpivot the sps and tdl columns
+    df = df.melt(id_vars=['id', 'week', 'test_kit_code'], var_name='lab', value_name='count_preds')
+
+    # drop id
+    df.drop('id', axis=1, inplace=True)
+
+    # Replace 'sps' with 2 and 'tdl' with 0 
+    df['lab'] = df['lab'].replace({'sps': 2, 'tdl': 0})
+    df['lab'] = df['lab'].astype(int)
+
     # assign 1 for sh24 brand
     df['brand'] = 1
     return df
 
-# Group by 'week' and apply the lab and brand assignment function
-sh24_df = sh_join_pd.groupby(['week']).apply(sh24_assign_lab_brand)
-sh24_df.reset_index(drop=True, inplace=True)
-sh24_df.shape
-
 # COMMAND ----------
 
-sh24_df
+# Apply the sh24_lab_brand function
+sh24_df = sh24_lab_brand(sh_join_pd)
+sh24_df.tail()
 
 # COMMAND ----------
 
@@ -208,8 +192,7 @@ sh24_df
 
 # COMMAND ----------
 
-fettle_pd = spark.sql("""select * from fettle_colour_pred where week > '2023-11-01'
-                    """).toPandas()
+fettle_pd = spark.sql("""select * from fettle_colour_pred""").toPandas()
 
 fe = spark.sql("""select * from prep_sti_order where brand_sk = 2 and order_created_at > '2023-06-01'""").toPandas()  
 
@@ -219,33 +202,17 @@ fe_top = fe[fe['test_kit_code'].isin(toplist)]
 print(fe_top.shape)
 
 # Get the  rest (low orders)
-lowlist = [1, 3, 479, 3551, 2595, 2527, 546, 476, 4573, 545, 70, 2119, 69, 955, 2048, 4641, 4572, 4165, 4027, 680, 3143, 952, 683, 3072, 3619]
+lowlist = [1,2,3,272,479,408,4640,3617,545,546,2595,4641,3619,680,683,952,5049,1979,4027,955,3141,69,70,2119,4165,3143,204,4301,207,2255,6620,5597,477,7645,6621,478,1503,4572,476,4573,3551,2527]
 fe_low = fe[fe['test_kit_code'].isin(lowlist)]
 print(fe_low.shape)
 
 # COMMAND ----------
 
-# DBTITLE 1,Add 4 weeks forecast to existing
-# Get the last date in the DataFrame
-last_date = fettle_pd['week'].max()
-
-# Generate new dates, one week apart
-new_dates = [last_date + timedelta(weeks=x) for x in range(1, 5)]
-
-# Create a new DataFrame with these dates
-new_df = pd.DataFrame({
-    'week': new_dates,
-    'preds': [643.44, 634.67, 603.41, 619.61]
-})
-
-# Append the new DataFrame to the original DataFrame
-ext_fettle_pd = fettle_pd.append(new_df, ignore_index=True)
-
-ext_fettle_pd
+fettle_pd
 
 # COMMAND ----------
 
-# DBTITLE 1,Apply to top fe
+# DBTITLE 1,Apply to top fettle orders
 # Apply the previous_weeks_data function
 fe_top_previous_weeks = previous_weeks_data(fe_top)
 
@@ -253,7 +220,7 @@ fe_top_previous_weeks = previous_weeks_data(fe_top)
 get_percentage = get_testkitcode_percentage(fe_top_previous_weeks, 'test_kit_code')
 
 # Apply add_sample_percentage function
-fe_top_pd = add_testkitcode_percentage(ext_fettle_pd, 'preds', get_percentage)
+fe_top_pd = add_testkitcode_percentage(fettle_pd, 'preds', get_percentage)
 
 # #drop column not needed anymore
 fe_top_pd.drop('preds', axis=1, inplace=True)
@@ -265,7 +232,7 @@ fe_top_pd
 
 # COMMAND ----------
 
-# DBTITLE 1,Apply fn to low
+# DBTITLE 1,Apply to low orders
 #Apply the previous  week for fe_low
 fe_low_p = previous_weeks_data(fe_low)
 
@@ -281,8 +248,9 @@ fe_low_pd = fe_low_pd.iloc[1:-1].reset_index(drop=True)
 
 # COMMAND ----------
 
+# DBTITLE 1,Merge
 
-#Merge both sh_top and sh_low togther
+# Merge both sh_top and sh_low togther
 fe_join_pd = fe_top_pd.join(fe_low_pd)
 fe_join_pd.tail()
 
@@ -318,19 +286,15 @@ fettle_df
 # COMMAND ----------
 
 # # SH24-Ireland
-ireland_pred = spark.sql("""select * from ireland_colour_pred where week > '2023-11-01'
-                    """).toPandas()
-ire = spark.sql("""select * from prep_sti_order where brand_sk = 5 and order_created_at > '2023-06-01'
-                    """).toPandas() 
-
-# COMMAND ----------
+ireland_pred = spark.sql("""select * from ireland_colour_pred""").toPandas()
+ire = spark.sql("""select * from prep_sti_order where brand_sk = 5 and order_created_at > '2023-06-01' """).toPandas() 
 
 # get top orders
-toplist = [547, 71, 3551, 2527]
+toplist = [547, 71, 3551, 2527, 683, 207]
 ire_top = ire[ire['test_kit_code'].isin(toplist)]
 
 #get low
-lowlist = [544, 68, 479, 3, 1, 136, 2595, 546, 476, 4573, 545, 70, 2119, 69, 955, 2048, 4641, 4572, 4165, 4027, 680, 3143, 952, 683, 3072, 3619]
+lowlist = [544, 68, 479, 3, 1, 136, 2595, 546, 476, 4573, 545, 70, 2119, 69, 955, 2048, 4641, 4572, 4165, 4027, 680, 3143, 952, 3072, 3619, 4694, 3087, 905, 747, 359, 319, 294, 217, 183, 167, 149, 147, 125, 108, 46, 37, 35, 34, 27, 25, 23, 22, 20, 16, 12, 10]
 ire_low = ire[ire['test_kit_code'].isin(lowlist)]
 ire_low.shape
 
@@ -346,16 +310,30 @@ get_percentage = get_testkitcode_percentage(ire_top_previous_weeks, 'test_kit_co
 # Apply add_sample_percentage function
 ire_top_pd = add_testkitcode_percentage(ireland_pred, 'preds', get_percentage)
 
-#drop column not needed anymore
+# drop column not needed anymore
 ire_top_pd.drop('preds', axis=1, inplace=True)
 
 # COMMAND ----------
 
-# # add 202 to 547 -red kit
-ire_top_pd.iloc[7:9, 1] = ire_top_pd.iloc[7:9, 1] + 202
-#or
-# ire_top_pd.loc[ire_top_pd['week'] == '2023-12-11', '547'] += 202
-# ire_top_pd.loc[ire_top_pd['week'] == '2023-12-18', '547'] += 202
+# remove red 547 from 580 from 2023-12-04 to 2024-02-26j
+# remove pink 71, from 200
+# add lime 683, add 500
+# add biscuit 207, add 200
+
+ire_top_pd['week'] = pd.to_datetime(ire_top_pd['week'])
+
+# Define the date range
+start_date = '2023-12-04'
+end_date = '2024-02-26'
+
+# Create a mask to identify rows within the specified date range
+mask = (ire_top_pd['week'] >= start_date) & (ire_top_pd['week'] <= end_date)
+
+# Subtract from the '547' column for rows within the date range
+ire_top_pd.loc[mask, 547] -= 600
+ire_top_pd.loc[mask, 71] -= 150
+ire_top_pd.loc[mask, 683] += 500
+ire_top_pd.loc[mask, 207] += 210
 
 # COMMAND ----------
 
@@ -416,10 +394,8 @@ ireland_df
 # COMMAND ----------
 
 # DBTITLE 1,Retrieve freetesting data
-freetest_pred = spark.sql("""select * from freetest_colour_pred where week > '2023-11-01'
-                    """).toPandas()
-ft = spark.sql("""select * from prep_sti_order where brand_sk = 4 and order_created_at > '2023-06-01'
-                    """).toPandas()
+freetest_pred = spark.sql("""select * from freetest_colour_pred""").toPandas()
+ft = spark.sql("""select * from prep_sti_order where brand_sk = 4 and order_created_at > '2023-06-01'""").toPandas()
 
 # get top orders
 toplist = [3, 1]
@@ -441,9 +417,6 @@ ft_top_pd = add_testkitcode_percentage(freetest_pred, 'preds', get_percentage)
 ft_top_pd.drop('preds', axis=1, inplace=True)
 
 # COMMAND ----------
-
-# add 12 to green column
-ft_top_pd.iloc[:, 2] = ft_top_pd.iloc[:, 2] + 12
 
 # add NHIV week forecast 
 ft_top_pd.loc[ft_top_pd['week'] == '2024-02-05', 1] = 623   
@@ -482,13 +455,13 @@ freetest_df = freetest_lab_brand(ft_top_pd)
 # Create the DataFrame with 17 rows and 4 columns
 hepc_df = pd.DataFrame({
     'test_kit_code': [2048] * 17,
-    'count_preds': np.random.randint(21, 33, size=17),  # 33 is exclusive
+    'count_preds': np.random.randint(19, 27, size=17),  
     'lab': [4] * 17,
     'brand': [6] * 17
 })
 
-# Create the 'week' column starting from '2023-11-06' for 17 weeks
-start_date = pd.Timestamp('2023-11-06')
+# Create the 'week' column for 17 weeks
+start_date = pd.Timestamp('2023-12-04')
 week_column = [start_date + timedelta(weeks=i) for i in range(17)]
 
 # Insert 'week' column at the beginning
@@ -506,68 +479,19 @@ hepc_df.tail()
 
 # COMMAND ----------
 
-
-
-# COMMAND ----------
-
 # MAGIC %md
-# MAGIC ###Merge all brands SH24, Fettle, Ireland. Freetesting 
+# MAGIC ###Merge all brands SH24, Fettle, Ireland, Freetesting, HepC
 
 # COMMAND ----------
 
-all_df = pd.concat([sh24_df, fettle_df, ireland_df]).reset_index(drop=True)
+all_df = pd.concat([sh24_df, fettle_df, ireland_df, freetest_df, hepc_df]).reset_index(drop=True)
 all_df['test_kit_code'] = all_df['test_kit_code'].astype(int)
 all_df 
 
 # COMMAND ----------
 
-# all_df = pd.concat([sh24_df, fettle_df, ireland_df, freetest_df, hepc_df]).reset_index(drop=True)
-# all_df['test_kit_code'] = all_df['test_kit_code'].astype(int)
-# all_df 
-
-# COMMAND ----------
-
 # MAGIC %md
-# MAGIC ####Test kit colour Predictions Assigned
-
-# COMMAND ----------
-
-# #Merge all_df with bill_of_materials table
-# merged_df = pd.merge(all_df, df_bom, 
-#                      left_on=['sample_sk', 'brand', 'lab'], 
-#                      right_on=['sample_sk', 'brand_sk', 'lab_enum'], 
-#                      how='left')
-
-# # Performing the aggregation
-# grouped_df = merged_df.groupby(['week', 'sample_sk', 'brand', 'lab', 'consumable_sk', 'consumable'])
-# result = grouped_df.apply(lambda x: (x['count_preds'] * x['count1']).sum()).reset_index(name='total_count')
-
-
-# COMMAND ----------
-
-# # Save the predictions
-# from pyspark.sql import SparkSession
-
-# # Initialize Spark Session
-# spark = SparkSession.builder.appName("testkitcolour_prediction").getOrCreate()
-
-# # Convert Pandas DataFrame to Spark DataFrame
-# spark_df = spark.createDataFrame(all_df)
-
-# # Save as a Parquet table
-# spark_df.write.format("parquet").mode("overwrite").saveAsTable("colour_pred")
-
-# COMMAND ----------
-
-all_x = spark.sql('''
-                   select * from colour_pred''').toPandas()
-all_x.shape
-
-# COMMAND ----------
-
-all_df = pd.concat([all_x, hepc_df]).reset_index(drop=True)
-all_df['test_kit_code'] = all_df['test_kit_code'].astype(int)
-all_df 
+# MAGIC ####Test kit colour Predictions Saved
 
 # COMMAND ----------
 
@@ -580,5 +504,7 @@ spark = SparkSession.builder.appName("testkitcolour_prediction").getOrCreate()
 # Convert Pandas DataFrame to Spark DataFrame
 spark_df = spark.createDataFrame(all_df)
 
-# # Save as a Parquet table
-# spark_df.write.format("parquet").mode("overwrite").saveAsTable("colour_pred")
+# Save as a table
+spark.conf.set("spark.sql.legacy.allowCreatingManagedTableUsingNonemptyLocation","true")
+spark_df.write.format("delta").mode("overwrite").saveAsTable("colour_pred")
+

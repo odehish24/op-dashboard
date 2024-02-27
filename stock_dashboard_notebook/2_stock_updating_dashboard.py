@@ -148,34 +148,30 @@ consumable_used1.write.mode("append").saveAsTable("consumable_used")
 # COMMAND ----------
 
 # DBTITLE 1,Get Quantity in Stock - from supplies tracker google sheet
-# Get quantity in stock from supplies tracker as at 16 october 2023
-path = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQvualKidxOjIjDPQEiExsiFA18wIIno8y0qt_xTStd-FptmwHgtfN_PIbpM8nq5UtfnDaVc_ngSndF/pub?gid=1323386964&single=true&output=csv"
+# # Get quantity in stock from supplies tracker as at 16 october 2023
+# path = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQvualKidxOjIjDPQEiExsiFA18wIIno8y0qt_xTStd-FptmwHgtfN_PIbpM8nq5UtfnDaVc_ngSndF/pub?gid=1323386964&single=true&output=csv"
 
-# Load CSV file using a Python pandas DataFrame
-import pandas as pd
-pdf = pd.read_csv(path)
+# # Load CSV file using a Python pandas DataFrame
+# import pandas as pd
+# pdf = pd.read_csv(path)
 
-# Convert pandas DataFrame to Spark DataFrame
-from pyspark.sql.types import *
-schema = StructType([StructField(col, StringType(), True) for col in pdf.columns])
-sdf = spark.createDataFrame(pdf, schema)
+# # Convert pandas DataFrame to Spark DataFrame
+# from pyspark.sql.types import *
+# schema = StructType([StructField(col, StringType(), True) for col in pdf.columns])
+# sdf = spark.createDataFrame(pdf, schema)
 
-# save as temporary view
-sdf.createOrReplaceTempView("qty_temp_view")
+# # save as temporary view
+# sdf.createOrReplaceTempView("qty_temp_view")
 
-sql_statement = """
-    SELECT 
-        CAST(con_sk AS INT) AS con_sk, 
-        CAST(REGEXP_REPLACE(total_qty, ',', '') AS INT) AS total_qty
-    FROM 
-        qty_temp_view
-    WHERE con_sk NOT IN (26, 27)
-"""
-qty_in_df = spark.sql(sql_statement)
+# sql_statement = """
+#     SELECT 
+#         CAST(con_sk AS INT) AS con_sk, 
+#         CAST(REGEXP_REPLACE(total_qty, ',', '') AS INT) AS total_qty
+#     FROM 
+#         qty_temp_view
+#     WHERE con_sk NOT IN (26, 27)
+# """
+# qty_in_df = spark.sql(sql_statement)
 
-# Save as a table
-qty_in_df.write.mode("overwrite").saveAsTable("default.qty_in_stock")
-
-# COMMAND ----------
-
-display(qty_in_df)
+# # Save as a table
+# qty_in_df.write.mode("overwrite").saveAsTable("default.qty_in_stock")
